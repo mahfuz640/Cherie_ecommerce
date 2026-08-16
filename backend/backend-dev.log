@@ -7,8 +7,54 @@
 [33m[nodemon] watching path(s): *.*[39m
 [33m[nodemon] watching extensions: js,mjs,cjs,json[39m
 [32m[nodemon] starting `node src/server.js`[39m
-Cherie API connected to MongoDB on :5000
-[0mGET /api/health [32m200[0m 3.010 ms - 11[0m
-[0mPOST /api/auth/login [32m200[0m 2501.867 ms - 246[0m
-[0mGET /api/products [32m200[0m 1498.982 ms - 2[0m
-[0mGET /api/carousel [32m200[0m 1026.057 ms - 2[0m
+MongooseServerSelectionError: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+    at _handleConnectionErrors (C:\Users\Rabbi\Desktop\Cherie_ecommerce\backend\node_modules\mongoose\lib\connection.js:1169:11)
+    at NativeConnection.openUri (C:\Users\Rabbi\Desktop\Cherie_ecommerce\backend\node_modules\mongoose\lib\connection.js:1100:11)
+    at async start (file:///C:/Users/Rabbi/Desktop/Cherie_ecommerce/backend/src/server.js:25:101) {
+  errorLabelSet: Set(0) {},
+  reason: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-7tpqnm2-shard-00-02.izbwgdy.mongodb.net:27017' => [ServerDescription],
+      'ac-7tpqnm2-shard-00-00.izbwgdy.mongodb.net:27017' => [ServerDescription],
+      'ac-7tpqnm2-shard-00-01.izbwgdy.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-dsz3bg-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  },
+  code: undefined,
+  cause: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-7tpqnm2-shard-00-02.izbwgdy.mongodb.net:27017' => [ServerDescription],
+      'ac-7tpqnm2-shard-00-00.izbwgdy.mongodb.net:27017' => [ServerDescription],
+      'ac-7tpqnm2-shard-00-01.izbwgdy.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-dsz3bg-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  }
+}
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js`[39m
+Cherie API online on :5000
+MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+[0mGET /api/health [32m200[0m 2.964 ms - 65[0m
+MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/

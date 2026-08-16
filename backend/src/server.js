@@ -1,11 +1,12 @@
 import 'dotenv/config'; import express from 'express'; import mongoose from 'mongoose'; import cors from 'cors'; import morgan from 'morgan'; import bcrypt from 'bcryptjs'; import jwt from 'jsonwebtoken'; import multer from 'multer';
 import { Product, Admin, Order, Carousel } from './models.js'; import { requireAdmin } from './auth.js'; import { createInvoice } from './invoice.js';
 const app = express(), port = process.env.PORT || 5000;
+const GROQ_MODELS = (process.env.GROQ_MODELS || 'not-configured').split(',').map(model => model.trim()).filter(Boolean);
 const allowedOrigins = [...new Set([process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5173', 'http://127.0.0.1:5173'])];
 app.use(cors({ origin: allowedOrigins })); app.use(express.json()); app.use(morgan('dev')); app.use('/uploads', express.static('uploads'));
 const storage = multer.diskStorage({ destination: 'uploads/', filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`) });
 const upload = multer({ storage, fileFilter: (_, file, cb) => cb(null, file.mimetype.startsWith('image/')) });
-app.get('/api/health', (_, res) => res.json({ ok: true }));
+app.get('/api/health', (_, res) => res.status(200).json({ status: 'online', provider: 'Groq', models: GROQ_MODELS }));
 app.get('/api/carousel', async (_, res) => res.json(await Carousel.find().sort({ createdAt: -1 })));
 app.post('/api/carousel', requireAdmin, async (req, res) => { if (!req.body.image) return res.status(400).json({ message: 'A carousel image is required.' }); res.status(201).json(await Carousel.create(req.body)); });
 app.patch('/api/carousel/:id', requireAdmin, async (req, res) => { const slide = await Carousel.findByIdAndUpdate(req.params.id, req.body); slide ? res.json(slide) : res.status(404).json({ message: 'Slide not found.' }); });
@@ -21,5 +22,6 @@ app.post('/api/orders', async (req, res) => { const { customer, items } = req.bo
 app.get('/api/orders/:id/invoice', async (req, res) => { const order = await Order.findById(req.params.id); order ? createInvoice(res, order) : res.status(404).json({ message: 'Order not found.' }); });
 app.get('/api/orders', requireAdmin, async (_, res) => res.json(await Order.find().sort({ createdAt: -1 })));
 app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => res.json(await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true })));
-async function start() { if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required.'); await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 }); const email = (process.env.ADMIN_EMAIL || 'admin@cherie.com').toLowerCase(); if (!await Admin.findOne({ email })) await Admin.create({ email, passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 12) }); app.listen(port, () => console.log(`Cherie API connected to MongoDB on :${port}`)); }
-start().catch(err => { console.error(err); process.exit(1); });
+async function connectMongo() { try { if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required.'); await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 }); const email = (process.env.ADMIN_EMAIL || 'admin@cherie.com').toLowerCase(); if (!await Admin.findOne({ email })) await Admin.create({ email, passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 12) }); console.log('MongoDB connected.'); } catch (error) { console.error(`MongoDB unavailable: ${error.message}`); setTimeout(connectMongo, 30000); } }
+function start() { app.listen(port, () => console.log(`Cherie API online on :${port}`)); connectMongo(); }
+start();

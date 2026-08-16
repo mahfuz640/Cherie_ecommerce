@@ -20,7 +20,7 @@
 - MongoDB connection details remain only in `backend/.env`; product, order, and carousel records persist in Atlas.
 
 ## API
-- Public: `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, and configured `GROQ_MODELS`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
 - Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo

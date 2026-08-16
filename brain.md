@@ -16,6 +16,7 @@
 ## Setup
 - Backend: copy `backend/.env.example` to `backend/.env`, configure private `MONGODB_URI`, `JWT_SECRET`, and admin credentials, then `npm install` and `npm run dev`.
 - Frontend: copy `frontend/.env.example` to `frontend/.env`, then `npm install` and `npm run dev`.
+- Frontend uses Vite 8 with `@vitejs/plugin-react` 6; it requires Node.js 22.12–26, declared in the frontend package's `engines` setting for Render.
 - Initial admin is created automatically from the env credentials when the backend starts.
 - MongoDB connection details remain only in `backend/.env`; product, order, and carousel records persist in Atlas.
 

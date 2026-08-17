@@ -6,6 +6,8 @@ import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   Product,
   Admin,
@@ -13,13 +15,15 @@ import {
   Carousel,
   CollectionHeroSettings,
   COLLECTION_HERO_DEFAULTS,
-  COLLECTION_HERO_SETTINGS_KEY
+  COLLECTION_HERO_SETTINGS_KEY,
+  isPersistentImageDataUrl
 } from './models.js';
 import { requireAdmin } from './auth.js';
 import { createInvoice } from './invoice.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
+const uploadsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 const GROQ_MODELS = (process.env.GROQ_MODELS || 'not-configured')
   .split(',')
   .map(model => model.trim())
@@ -42,16 +46,13 @@ app.use(cors({
     callback(isAllowed ? null : new Error('Origin is not allowed by CORS.'), isAllowed);
   }
 }));
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.use(morgan('dev'));
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadsDirectory));
 
-const storage = multer.diskStorage({
-  destination: 'uploads/',
-  filename: (_, file, callback) => callback(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`)
-});
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_, file, callback) => callback(null, file.mimetype.startsWith('image/'))
 });
 
@@ -70,6 +71,30 @@ const requireDatabase = (_, res, next) => {
 };
 
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+
+function carouselImageError(body, { required = false } = {}) {
+  if (!body || Array.isArray(body) || typeof body !== 'object') {
+    return 'Request body must be a JSON object.';
+  }
+  if (!Object.hasOwn(body, 'image')) {
+    return required ? 'A carousel image is required.' : null;
+  }
+  if (!isPersistentImageDataUrl(body.image)) {
+    return 'Carousel image must be a Mongo-persistent data:image base64 value. Upload the image first.';
+  }
+  return null;
+}
+
+function productImagesError(body) {
+  if (!body || Array.isArray(body) || typeof body !== 'object') {
+    return 'Request body must be a JSON object.';
+  }
+  if (!Object.hasOwn(body, 'images')) return null;
+  if (!Array.isArray(body.images) || !body.images.every(isPersistentImageDataUrl)) {
+    return 'Product images must be Mongo-persistent data:image base64 values. Use an empty image list to remove all images.';
+  }
+  return null;
+}
 
 const collectionHeroPayload = settings => ({
   eyebrow: settings?.eyebrow ?? COLLECTION_HERO_DEFAULTS.eyebrow,
@@ -148,12 +173,15 @@ app.get('/api/carousel', requireDatabase, asyncRoute(async (_, res) => {
 }));
 
 app.post('/api/carousel', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  if (!req.body.image) return res.status(400).json({ message: 'A carousel image is required.' });
+  const error = carouselImageError(req.body, { required: true });
+  if (error) return res.status(400).json({ message: error });
   res.status(201).json(await Carousel.create(req.body));
 }));
 
 app.patch('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const slide = await Carousel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const error = carouselImageError(req.body);
+  if (error) return res.status(400).json({ message: error });
+  const slide = await Carousel.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   slide ? res.json(slide) : res.status(404).json({ message: 'Slide not found.' });
 }));
 
@@ -197,10 +225,14 @@ app.get('/api/products/:id', requireDatabase, asyncRoute(async (req, res) => {
 }));
 
 app.post('/api/products', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
+  const error = productImagesError(req.body);
+  if (error) return res.status(400).json({ message: error });
   res.status(201).json(await Product.create(req.body));
 }));
 
 app.patch('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
+  const error = productImagesError(req.body);
+  if (error) return res.status(400).json({ message: error });
   const item = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   item ? res.json(item) : res.status(404).json({ message: 'Product not found.' });
 }));
@@ -213,9 +245,9 @@ app.delete('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async 
 }));
 
 app.post('/api/upload', requireAdmin, upload.single('image'), (req, res) => {
-  req.file
-    ? res.status(201).json({ url: `/uploads/${req.file.filename}` })
-    : res.status(400).json({ message: 'Choose an image.' });
+  if (!req.file) return res.status(400).json({ message: 'Choose an image.' });
+  const url = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  res.status(201).json({ url });
 });
 
 app.post('/api/orders', requireDatabase, asyncRoute(async (req, res) => {
@@ -259,8 +291,12 @@ app.patch('/api/orders/:id/status', requireAdmin, requireDatabase, asyncRoute(as
 app.use((error, _, res, next) => {
   console.error(error);
   if (res.headersSent) return next(error);
-  const status = error.name === 'CastError' ? 400 : error.status || 500;
-  const message = status >= 500 ? 'Server is temporarily unavailable. Please try again shortly.' : error.message;
+  const isUploadError = error instanceof multer.MulterError;
+  const isValidationError = error.name === 'ValidationError';
+  const status = isUploadError || isValidationError || error.name === 'CastError' ? 400 : error.status || 500;
+  const message = isUploadError
+    ? (error.code === 'LIMIT_FILE_SIZE' ? 'Image must be 5 MB or smaller.' : 'Image upload failed.')
+    : (status >= 500 ? 'Server is temporarily unavailable. Please try again shortly.' : error.message);
   res.status(status).json({ message });
 });
 

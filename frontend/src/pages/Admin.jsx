@@ -11,7 +11,7 @@ export default function Admin() {
   const token = localStorage.getItem('cherie-token'), navigate = useNavigate();
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null), [editingSlide, setEditingSlide] = useState(null);
-  const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [notice, setNotice] = useState(''), [error, setError] = useState('');
+  const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState('');
   const auth = { Authorization: `Bearer ${token}` }, jsonAuth = { ...auth, 'Content-Type': 'application/json' };
   async function load() {
     try {
@@ -29,11 +29,11 @@ export default function Admin() {
   async function saveProduct(event) {
     event.preventDefault(); setError('');
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    const payload = { ...values, price: Number(values.price), stock: Number(values.stock), featured: values.featured === 'on', images: productImage ? [productImage] : editingProduct?.images || [] };
+    const payload = { ...values, price: Number(values.price), stock: Number(values.stock), featured: values.featured === 'on', images: removeProductImage ? [] : (productImage ? [productImage] : editingProduct?.images || []) };
     delete payload.image;
     try {
       await api(`/api/products${editingProduct ? `/${editingProduct._id}` : ''}`, { method: editingProduct ? 'PATCH' : 'POST', headers: jsonAuth, body: JSON.stringify(payload) });
-      setNotice(editingProduct ? 'Product updated.' : 'Product added.'); setEditingProduct(null); setProductImage(''); event.currentTarget.reset(); await load();
+      setNotice(editingProduct ? 'Product updated.' : 'Product added.'); setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); event.currentTarget.reset(); await load();
     } catch (reason) { setError(reason.message); }
   }
   async function deleteProduct(product) {
@@ -51,7 +51,7 @@ export default function Admin() {
   }
   async function deleteSlide(slide) {
     if (!window.confirm('Remove this carousel image?')) return;
-    try { await api(`/api/carousel/${slide._id}`, { method: 'DELETE', headers: auth }); setSlides(current => current.filter(item => item._id !== slide._id)); setNotice('Carousel image removed.'); }
+    try { await api(`/api/carousel/${slide._id}`, { method: 'DELETE', headers: auth }); setSlides(current => current.filter(item => item._id !== slide._id)); if (editingSlide?._id === slide._id) { setEditingSlide(null); setSlideImage(''); } setNotice('Carousel image removed.'); }
     catch (reason) { setError(reason.message); }
   }
   async function saveCollectionHero(event) {
@@ -67,7 +67,7 @@ export default function Admin() {
     catch (reason) { setError(reason.message); }
   }
   if (!token) return null;
-  const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); };
+  const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); setRemoveProductImage(false); };
   const startEditSlide = slide => { setEditingSlide(slide); setSlideImage(slide.image); };
-  return <main className="admin"><div className="admin-top"><Brand /><button onClick={() => { localStorage.removeItem('cherie-token'); navigate('/'); }}>Sign out</button></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onImageChange={setProductImage} onUpload={file => upload(file, setProductImage)} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); }} /><CarouselForm editing={editingSlide} image={slideImage} onImageChange={setSlideImage} onUpload={file => upload(file, setSlideImage)} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
+  return <main className="admin"><div className="admin-top"><Brand /><button onClick={() => { localStorage.removeItem('cherie-token'); navigate('/'); }}>Sign out</button></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : setSlideImage('')} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
 }

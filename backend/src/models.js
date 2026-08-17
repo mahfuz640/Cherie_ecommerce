@@ -8,13 +8,32 @@ export const COLLECTION_HERO_DEFAULTS = Object.freeze({
   visible: true
 });
 
+const persistentImageDataUrl = /^data:image\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i;
+
+// Images stored in MongoDB must carry their bytes with the document. This keeps
+// them available after Render restarts instead of relying on its ephemeral disk.
+export function isPersistentImageDataUrl(value) {
+  if (typeof value !== 'string') return false;
+  const match = value.match(persistentImageDataUrl);
+  return Boolean(match && match[1].length % 4 === 0);
+}
+
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, required: true, trim: true },
   price: { type: Number, required: true, min: 0 },
   compareAtPrice: { type: Number, min: 0 },
   category: { type: String, default: 'Jewellery', trim: true },
-  images: { type: [String], default: [] },
+  images: {
+    type: [{
+      type: String,
+      validate: {
+        validator: isPersistentImageDataUrl,
+        message: 'Each product image must be a Mongo-persistent data:image base64 value.'
+      }
+    }],
+    default: []
+  },
   stock: { type: Number, default: 0, min: 0 },
   featured: { type: Boolean, default: false }
 }, { timestamps: true });
@@ -37,7 +56,15 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const carouselSchema = new mongoose.Schema({
-  image: { type: String, required: true }, title: { type: String, trim: true }, subtitle: { type: String, trim: true }, link: { type: String, default: '#collection' }
+  image: {
+    type: String,
+    required: [true, 'A carousel image is required.'],
+    validate: {
+      validator: isPersistentImageDataUrl,
+      message: 'Carousel image must be a Mongo-persistent data:image base64 value.'
+    }
+  },
+  title: { type: String, trim: true }, subtitle: { type: String, trim: true }, link: { type: String, default: '#collection' }
 }, { timestamps: true });
 
 const collectionHeroSettingsSchema = new mongoose.Schema({

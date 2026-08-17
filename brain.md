@@ -21,9 +21,10 @@
 - MongoDB connection details remain only in `backend/.env`; product, order, and carousel records persist in Atlas.
 - `https://cherie-fonrtend.onrender.com` is the deployed backend API. Production frontend builds use it through `frontend/.env.production`; local development uses `localhost:5000`. The backend allows configured CORS origins, local Vite origins, and Render origins by default (`ALLOW_RENDER_ORIGINS=false` disables the last option).
 - `backend/.env` is ignored by Git, so Render must receive a valid Mongo connection variable (`MONGODB_URI`; `MONGO_URI`, `MONGO_URL`, `MONGODB_URL`, and `MONGODB_CONNECTION_STRING` are accepted aliases), `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in its own Environment settings. Database routes return a safe 503 JSON response while Atlas is unavailable instead of crashing the service.
+- A valid-password login that returns a 5xx while `/api/health` says MongoDB is connected means the deployed backend is missing `JWT_SECRET`; add that server-side Render environment variable and redeploy. No secret is exposed by the health diagnostic.
 
 ## API
-- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
 - Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo

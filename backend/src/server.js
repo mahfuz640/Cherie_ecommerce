@@ -70,6 +70,7 @@ app.get('/api/health', (_, res) => res.status(200).json({
   database: databaseState(),
   databaseConfigured: Boolean(normalizedMongoUri()),
   databaseConfigSource: mongoConfig().key,
+  authenticationConfigured: Boolean(jwtSecret()),
   databaseIssue: databaseState() === 'connected' ? null : lastMongoIssue
 }));
 
@@ -98,6 +99,12 @@ app.post('/api/auth/login', requireDatabase, asyncRoute(async (req, res) => {
   const password = req.body?.password || '';
   if (!password) return res.status(400).json({ message: 'Password is required.' });
 
+  const secret = jwtSecret();
+  if (!secret) {
+    console.error('Admin sign-in blocked: JWT_SECRET is not configured.');
+    return res.status(503).json({ message: 'Admin sign-in is not configured yet. Please contact the store owner.' });
+  }
+
   const email = (process.env.ADMIN_EMAIL || 'admin@cherie.com').toLowerCase();
   const admin = await Admin.findOne({ email });
   if (!admin || !await bcrypt.compare(password, admin.passwordHash)) {
@@ -105,7 +112,7 @@ app.post('/api/auth/login', requireDatabase, asyncRoute(async (req, res) => {
   }
 
   res.json({
-    token: jwt.sign({ id: admin._id, email: admin.email }, process.env.JWT_SECRET, { expiresIn: '12h' }),
+    token: jwt.sign({ id: admin._id, email: admin.email }, secret, { expiresIn: '12h' }),
     email: admin.email
   });
 }));
@@ -212,6 +219,10 @@ function mongoConfig() {
 
 function normalizedMongoUri() {
   return mongoConfig().uri;
+}
+
+function jwtSecret() {
+  return String(process.env.JWT_SECRET || '').trim();
 }
 
 function mongoIssueCode(error) {

@@ -11,7 +11,7 @@
 1. Store (`/`) fetches `GET /api/products` and shows a jewellery grid.
 2. Product view (`/products/:id`) fetches one product and adds it to a browser cart.
 3. Checkout (`/checkout`) lets customers increase, decrease, or remove bag items before posting customer/cart details to `POST /api/orders`; it then downloads `/api/orders/:id/invoice` as a PDF.
-4. Admin signs in at `/admin/login`; JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, and order-status updates.
+4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, and order-status updates.
 
 ## Setup
 - Backend: copy `backend/.env.example` to `backend/.env`, configure private `MONGODB_URI`, `JWT_SECRET`, and admin credentials, then `npm install` and `npm run dev`.
@@ -19,7 +19,8 @@
 - Frontend uses Vite 8 with `@vitejs/plugin-react` 6; it requires Node.js 22.12–26, declared in the frontend package's `engines` setting for Render.
 - Initial admin is created automatically from the env credentials when the backend starts.
 - MongoDB connection details remain only in `backend/.env`; product, order, and carousel records persist in Atlas.
-- Backend CORS allows local Vite origins and the deployed frontend origin `https://cherie-fonrtend.onrender.com` via `CLIENT_URL`. A deployed Vite build must receive a public backend URL through `VITE_API_URL`; `localhost:5000` is local-development only.
+- `https://cherie-fonrtend.onrender.com` is the deployed backend API. Production frontend builds use it through `frontend/.env.production`; local development uses `localhost:5000`. The backend allows configured CORS origins, local Vite origins, and Render origins by default (`ALLOW_RENDER_ORIGINS=false` disables the last option).
+- `backend/.env` is ignored by Git, so Render must receive `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in its own Environment settings. Database routes return a safe 503 JSON response while Atlas is unavailable instead of crashing the service.
 
 ## API
 - Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, and configured `GROQ_MODELS`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.

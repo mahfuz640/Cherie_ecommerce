@@ -69,6 +69,7 @@ app.get('/api/health', (_, res) => res.status(200).json({
   models: GROQ_MODELS,
   database: databaseState(),
   databaseConfigured: Boolean(normalizedMongoUri()),
+  databaseConfigSource: mongoConfig().key,
   databaseIssue: databaseState() === 'connected' ? null : lastMongoIssue
 }));
 
@@ -189,17 +190,35 @@ app.use((error, _, res, next) => {
 
 let reconnectTimer;
 let lastMongoIssue = null;
+const mongoEnvironmentKeys = ['MONGODB_URI', 'MONGO_URI', 'MONGO_URL', 'MONGODB_URL', 'MONGODB_CONNECTION_STRING'];
+
+function cleanMongoUri(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^[A-Z_]+=(?=mongodb(?:\+srv)?:\/\/)/i, '')
+    .replace(/^['"]|['"]$/g, '');
+}
+
+function mongoConfig() {
+  let invalidKey = null;
+  for (const key of mongoEnvironmentKeys) {
+    const uri = cleanMongoUri(process.env[key]);
+    if (!uri) continue;
+    if (/^mongodb(?:\+srv)?:\/\//i.test(uri)) return { key, uri, invalid: false };
+    invalidKey ||= key;
+  }
+  return { key: invalidKey, uri: '', invalid: Boolean(invalidKey) };
+}
 
 function normalizedMongoUri() {
-  return (process.env.MONGODB_URI || '')
-    .trim()
-    .replace(/^MONGODB_URI=/, '')
-    .replace(/^['"]|['"]$/g, '');
+  return mongoConfig().uri;
 }
 
 function mongoIssueCode(error) {
   const message = String(error?.message || '').toLowerCase();
-  if (!normalizedMongoUri()) return 'missing_mongodb_uri';
+  const config = mongoConfig();
+  if (config.invalid) return 'invalid_mongodb_uri';
+  if (!config.uri) return 'missing_mongodb_uri';
   if (message.includes('authentication failed') || message.includes('bad auth')) return 'authentication_failed';
   if (message.includes('querysrv') || message.includes('getaddrinfo') || message.includes('dns')) return 'dns_failure';
   if (message.includes('could not connect to any servers') || message.includes('server selection') || message.includes('timed out')) {

@@ -302,3 +302,5 @@ MongoDB unavailable: Could not connect to any servers in your MongoDB Atlas clus
 MongoDB connected.
 [0mGET /api/health [32m200[0m 1.941 ms - 65[0m
 [0mGET /api/products [32m200[0m 51.082 ms - 2[0m
+[0mGET /api/products [32m200[0m 86.453 ms - 2[0m
+[0mGET /api/carousel [36m304[0m 94.081 ms - -[0m

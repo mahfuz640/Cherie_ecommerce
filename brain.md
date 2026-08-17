@@ -19,6 +19,7 @@
 - Frontend uses Vite 8 with `@vitejs/plugin-react` 6; it requires Node.js 22.12–26, declared in the frontend package's `engines` setting for Render.
 - Initial admin is created automatically from the env credentials when the backend starts.
 - MongoDB connection details remain only in `backend/.env`; product, order, and carousel records persist in Atlas.
+- Backend CORS allows local Vite origins and the deployed frontend origin `https://cherie-fonrtend.onrender.com` via `CLIENT_URL`. A deployed Vite build must receive a public backend URL through `VITE_API_URL`; `localhost:5000` is local-development only.
 
 ## API
 - Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, and configured `GROQ_MODELS`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.

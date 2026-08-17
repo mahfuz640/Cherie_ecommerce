@@ -31,4 +31,4 @@
 - Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `PATCH /api/collection-hero`, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo
-- `frontend/public/logo.png` is the round pink Cherie logo used in both customer and admin headers.
+- `frontend/public/logo.png` is the round pink Cherie logo used in both customer and admin headers, and as the browser-tab/favicon image.

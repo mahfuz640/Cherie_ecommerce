@@ -100,7 +100,9 @@ const collectionHeroPayload = settings => ({
   eyebrow: settings?.eyebrow ?? COLLECTION_HERO_DEFAULTS.eyebrow,
   heading: settings?.heading ?? COLLECTION_HERO_DEFAULTS.heading,
   description: settings?.description ?? COLLECTION_HERO_DEFAULTS.description,
-  visible: settings?.visible ?? COLLECTION_HERO_DEFAULTS.visible
+  visible: settings?.visible ?? COLLECTION_HERO_DEFAULTS.visible,
+  announcementText: settings?.announcementText ?? COLLECTION_HERO_DEFAULTS.announcementText,
+  announcementVisible: settings?.announcementVisible ?? COLLECTION_HERO_DEFAULTS.announcementVisible
 });
 
 function collectionHeroChanges(body) {
@@ -108,7 +110,7 @@ function collectionHeroChanges(body) {
     return { error: 'Settings must be a JSON object.' };
   }
 
-  const allowedFields = ['eyebrow', 'heading', 'description', 'visible'];
+  const allowedFields = ['eyebrow', 'heading', 'description', 'visible', 'announcementText', 'announcementVisible'];
   const fields = Object.keys(body);
   const unknownField = fields.find(field => !allowedFields.includes(field));
   if (unknownField) return { error: `Unsupported setting: ${unknownField}.` };
@@ -133,6 +135,21 @@ function collectionHeroChanges(body) {
   if (Object.hasOwn(body, 'visible')) {
     if (typeof body.visible !== 'boolean') return { error: 'Visible must be true or false.' };
     changes.visible = body.visible;
+  }
+  if (Object.hasOwn(body, 'announcementText')) {
+    if (typeof body.announcementText !== 'string' || !body.announcementText.trim()) {
+      return { error: 'Announcement text is required.' };
+    }
+    if (body.announcementText.trim().length > 180) {
+      return { error: 'Announcement text must be 180 characters or fewer.' };
+    }
+    changes.announcementText = body.announcementText.trim();
+  }
+  if (Object.hasOwn(body, 'announcementVisible')) {
+    if (typeof body.announcementVisible !== 'boolean') {
+      return { error: 'Announcement visibility must be true or false.' };
+    }
+    changes.announcementVisible = body.announcementVisible;
   }
   return { changes };
 }
@@ -366,6 +383,18 @@ async function connectMongo() {
       { key: COLLECTION_HERO_SETTINGS_KEY },
       { $setOnInsert: { ...COLLECTION_HERO_DEFAULTS } },
       { upsert: true, setDefaultsOnInsert: true }
+    );
+    // Older collection-settings documents predate the announcement fields. Add
+    // only fields that are absent, leaving every existing admin setting intact.
+    await CollectionHeroSettings.updateOne(
+      { key: COLLECTION_HERO_SETTINGS_KEY, announcementText: { $exists: false } },
+      { $set: { announcementText: COLLECTION_HERO_DEFAULTS.announcementText } },
+      { runValidators: true }
+    );
+    await CollectionHeroSettings.updateOne(
+      { key: COLLECTION_HERO_SETTINGS_KEY, announcementVisible: { $exists: false } },
+      { $set: { announcementVisible: COLLECTION_HERO_DEFAULTS.announcementVisible } },
+      { runValidators: true }
     );
     lastMongoIssue = null;
     console.log('MongoDB connected.');

@@ -12,7 +12,7 @@
 2. Product view (`/products/:id`) fetches one product and adds it to a browser cart.
 3. Checkout (`/checkout`) lets customers increase, decrease, or remove bag items before posting customer/cart details to `POST /api/orders`; it then downloads `/api/orders/:id/invoice` as a PDF.
 4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, order-status updates, and the persisted homepage collection-message controls.
-5. The storefront hero collection message (`CHERIE COLLECTION`, heading, and description) is stored in MongoDB. Admin can edit each text field or hide/show only the text overlay while keeping the carousel images visible.
+5. The storefront hero collection message (`CHERIE COLLECTION`, heading, and description) and top announcement bar are stored in MongoDB. Admin can edit each text field or hide/show the collection text overlay and announcement independently.
 
 ## Setup
 - Backend: copy `backend/.env.example` to `backend/.env`, configure private `MONGODB_URI`, `JWT_SECRET`, and admin credentials, then `npm install` and `npm run dev`.
@@ -27,7 +27,7 @@
 - For a Render Free web service, create an external HTTP monitor for `https://cherie-fonrtend.onrender.com/api/health` every 5 minutes. It provides inbound traffic before Render's 15-minute idle spin-down threshold, but a paid Render instance is required for a true always-on guarantee.
 
 ## API
-- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `GET /api/collection-hero`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `GET /api/collection-hero` (hero plus announcement text/visibility), `POST /api/orders`, `GET /api/orders/:id/invoice`.
 - Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `PATCH /api/collection-hero`, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo

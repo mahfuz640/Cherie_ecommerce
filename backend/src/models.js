@@ -5,7 +5,9 @@ export const COLLECTION_HERO_DEFAULTS = Object.freeze({
   eyebrow: 'CHERIE COLLECTION',
   heading: 'Made to be beloved always.',
   description: 'Discover a piece made for your story.',
-  visible: true
+  visible: true,
+  announcementText: 'Complimentary gift wrapping on every Cherie order',
+  announcementVisible: true
 });
 
 const persistentImageDataUrl = /^data:image\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i;
@@ -72,7 +74,9 @@ const collectionHeroSettingsSchema = new mongoose.Schema({
   eyebrow: { type: String, required: true, trim: true, minlength: 1, maxlength: 80, default: COLLECTION_HERO_DEFAULTS.eyebrow },
   heading: { type: String, required: true, trim: true, minlength: 1, maxlength: 160, default: COLLECTION_HERO_DEFAULTS.heading },
   description: { type: String, required: true, trim: true, minlength: 1, maxlength: 360, default: COLLECTION_HERO_DEFAULTS.description },
-  visible: { type: Boolean, default: COLLECTION_HERO_DEFAULTS.visible }
+  visible: { type: Boolean, default: COLLECTION_HERO_DEFAULTS.visible },
+  announcementText: { type: String, required: true, trim: true, minlength: 1, maxlength: 180, default: COLLECTION_HERO_DEFAULTS.announcementText },
+  announcementVisible: { type: Boolean, default: COLLECTION_HERO_DEFAULTS.announcementVisible }
 }, { timestamps: true });
 
 export const Product = mongoose.model('Product', productSchema);

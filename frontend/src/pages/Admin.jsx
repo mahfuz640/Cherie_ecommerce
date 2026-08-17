@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, apiImg } from '../api';
+import AnnouncementForm from '../components/admin/AnnouncementForm';
 import CarouselForm from '../components/admin/CarouselForm';
 import CollectionHeroForm from '../components/admin/CollectionHeroForm';
 import { OrderList, ProductList } from '../components/admin/AdminLists';
@@ -62,6 +63,14 @@ export default function Admin() {
       setCollectionHero(updated); setNotice(updated.visible ? 'Collection message updated and visible.' : 'Collection message updated and hidden.');
     } catch (reason) { setError(reason.message); }
   }
+  async function saveAnnouncement(event) {
+    event.preventDefault(); setError('');
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    try {
+      const updated = await api('/api/collection-hero', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ announcementText: values.announcementText, announcementVisible: values.announcementVisible === 'on' }) });
+      setCollectionHero(updated); setNotice(updated.announcementVisible ? 'Announcement updated and visible.' : 'Announcement updated and hidden.');
+    } catch (reason) { setError(reason.message); }
+  }
   async function changeStatus(order, status) {
     try { const updated = await api(`/api/orders/${order._id}/status`, { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ status }) }); setOrders(current => current.map(item => item._id === updated._id ? updated : item)); }
     catch (reason) { setError(reason.message); }
@@ -69,5 +78,5 @@ export default function Admin() {
   if (!token) return null;
   const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); setRemoveProductImage(false); };
   const startEditSlide = slide => { setEditingSlide(slide); setSlideImage(slide.image); };
-  return <main className="admin"><div className="admin-top"><Brand /><button onClick={() => { localStorage.removeItem('cherie-token'); navigate('/'); }}>Sign out</button></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : setSlideImage('')} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
+  return <main className="admin"><div className="admin-top"><Brand /><button onClick={() => { localStorage.removeItem('cherie-token'); navigate('/'); }}>Sign out</button></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : setSlideImage('')} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
 }

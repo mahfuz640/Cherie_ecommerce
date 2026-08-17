@@ -1,0 +1,14 @@
+.admin-actions {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.admin-top .admin-main-page {
+  background: none;
+  color: var(--deep);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 700;
+  padding: 9px;
+}

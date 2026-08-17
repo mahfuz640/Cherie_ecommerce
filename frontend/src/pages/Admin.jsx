@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, apiImg } from '../api';
+import { clearAdminSession, getAdminToken, hasActiveAdminSession } from '../adminSession';
 import AnnouncementForm from '../components/admin/AnnouncementForm';
 import CarouselForm from '../components/admin/CarouselForm';
 import CollectionHeroForm from '../components/admin/CollectionHeroForm';
 import { OrderList, ProductList } from '../components/admin/AdminLists';
 import ProductForm from '../components/admin/ProductForm';
 import Brand from '../components/Brand';
+import './Admin.css';
 
 export default function Admin() {
-  const token = localStorage.getItem('cherie-token'), navigate = useNavigate();
+  const token = getAdminToken(), navigate = useNavigate();
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null), [editingSlide, setEditingSlide] = useState(null);
   const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState('');
@@ -18,9 +20,22 @@ export default function Admin() {
     try {
       const [productData, orderData, slideData, heroData] = await Promise.all([api('/api/products'), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero')]);
       setProducts(productData); setOrders(orderData); setSlides(slideData); setCollectionHero(heroData);
-    } catch (reason) { setError(reason.message); }
+    } catch (reason) {
+      if (reason.status === 401) {
+        clearAdminSession();
+        navigate('/admin/login', { replace: true });
+        return;
+      }
+      setError(reason.message);
+    }
   }
-  useEffect(() => { if (!token) navigate('/admin/login'); else load(); }, [token]);
+  useEffect(() => {
+    if (!hasActiveAdminSession()) {
+      navigate('/admin/login', { replace: true });
+      return;
+    }
+    load();
+  }, [token]);
   async function upload(file, setter) {
     if (!file) return;
     setError('');
@@ -78,5 +93,5 @@ export default function Admin() {
   if (!token) return null;
   const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); setRemoveProductImage(false); };
   const startEditSlide = slide => { setEditingSlide(slide); setSlideImage(slide.image); };
-  return <main className="admin"><div className="admin-top"><Brand /><button onClick={() => { localStorage.removeItem('cherie-token'); navigate('/'); }}>Sign out</button></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : setSlideImage('')} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
+  return <main className="admin"><div className="admin-top"><Brand /><div className="admin-actions"><Link className="admin-main-page" to="/">Main Page</Link><button onClick={() => { clearAdminSession(); navigate('/admin/login', { replace: true }); }}>Sign out</button></div></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1>{notice && <p className="notice">{notice}</p>}{error && <p className="error">{error}</p>}<AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : setSlideImage('')} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
 }

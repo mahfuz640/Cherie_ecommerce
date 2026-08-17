@@ -4,6 +4,7 @@ import { api } from '../api';
 import { CartContext } from '../context/CartContext';
 import Brand from './Brand';
 import './Announcement.css';
+import './Navigation.css';
 
 const defaultAnnouncement = { text: 'Complimentary gift wrapping on every Cherie order', visible: true };
 

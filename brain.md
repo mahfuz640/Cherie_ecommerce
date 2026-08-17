@@ -11,7 +11,7 @@
 1. Store (`/`) fetches `GET /api/products` and shows a jewellery grid.
 2. Product view (`/products/:id`) fetches one product and adds it to a browser cart.
 3. Checkout (`/checkout`) lets customers increase, decrease, or remove bag items before posting customer/cart details to `POST /api/orders`; it then downloads `/api/orders/:id/invoice` as a PDF.
-4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, order-status updates, and the persisted homepage collection-message controls.
+4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and keeps the admin signed in through reloads/back navigation until its expiry. A signed-in visitor is redirected from the login screen to the dashboard; only explicit Sign out clears the session. The dashboard includes a Main Page button while keeping the session active, and enables product upload/edit/delete, carousel image upload/edit/delete, order-status updates, and the persisted homepage collection-message controls.
 5. The storefront hero collection message (`CHERIE COLLECTION`, heading, and description) and top announcement bar are stored in MongoDB. Admin can edit each text field or hide/show the collection text overlay and announcement independently.
 
 ## Setup

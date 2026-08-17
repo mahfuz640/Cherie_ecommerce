@@ -6,7 +6,15 @@ import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
-import { Product, Admin, Order, Carousel } from './models.js';
+import {
+  Product,
+  Admin,
+  Order,
+  Carousel,
+  CollectionHeroSettings,
+  COLLECTION_HERO_DEFAULTS,
+  COLLECTION_HERO_SETTINGS_KEY
+} from './models.js';
 import { requireAdmin } from './auth.js';
 import { createInvoice } from './invoice.js';
 
@@ -63,6 +71,47 @@ const requireDatabase = (_, res, next) => {
 
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
+const collectionHeroPayload = settings => ({
+  eyebrow: settings?.eyebrow ?? COLLECTION_HERO_DEFAULTS.eyebrow,
+  heading: settings?.heading ?? COLLECTION_HERO_DEFAULTS.heading,
+  description: settings?.description ?? COLLECTION_HERO_DEFAULTS.description,
+  visible: settings?.visible ?? COLLECTION_HERO_DEFAULTS.visible
+});
+
+function collectionHeroChanges(body) {
+  if (!body || Array.isArray(body) || typeof body !== 'object') {
+    return { error: 'Settings must be a JSON object.' };
+  }
+
+  const allowedFields = ['eyebrow', 'heading', 'description', 'visible'];
+  const fields = Object.keys(body);
+  const unknownField = fields.find(field => !allowedFields.includes(field));
+  if (unknownField) return { error: `Unsupported setting: ${unknownField}.` };
+  if (!fields.length) return { error: 'Provide at least one setting to update.' };
+
+  const changes = {};
+  if (Object.hasOwn(body, 'eyebrow')) {
+    if (typeof body.eyebrow !== 'string' || !body.eyebrow.trim()) return { error: 'Collection label is required.' };
+    if (body.eyebrow.trim().length > 80) return { error: 'Collection label must be 80 characters or fewer.' };
+    changes.eyebrow = body.eyebrow.trim();
+  }
+  if (Object.hasOwn(body, 'heading')) {
+    if (typeof body.heading !== 'string' || !body.heading.trim()) return { error: 'Collection heading is required.' };
+    if (body.heading.trim().length > 160) return { error: 'Collection heading must be 160 characters or fewer.' };
+    changes.heading = body.heading.trim();
+  }
+  if (Object.hasOwn(body, 'description')) {
+    if (typeof body.description !== 'string' || !body.description.trim()) return { error: 'Collection description is required.' };
+    if (body.description.trim().length > 360) return { error: 'Collection description must be 360 characters or fewer.' };
+    changes.description = body.description.trim();
+  }
+  if (Object.hasOwn(body, 'visible')) {
+    if (typeof body.visible !== 'boolean') return { error: 'Visible must be true or false.' };
+    changes.visible = body.visible;
+  }
+  return { changes };
+}
+
 app.get('/api/health', (_, res) => res.status(200).json({
   status: 'online',
   provider: 'Groq',
@@ -72,6 +121,26 @@ app.get('/api/health', (_, res) => res.status(200).json({
   databaseConfigSource: mongoConfig().key,
   authenticationConfigured: Boolean(jwtSecret()),
   databaseIssue: databaseState() === 'connected' ? null : lastMongoIssue
+}));
+
+app.get('/api/collection-hero', requireDatabase, asyncRoute(async (_, res) => {
+  const settings = await CollectionHeroSettings.findOne({ key: COLLECTION_HERO_SETTINGS_KEY }).lean();
+  res.json(collectionHeroPayload(settings));
+}));
+
+app.patch('/api/collection-hero', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
+  const { changes, error } = collectionHeroChanges(req.body);
+  if (error) return res.status(400).json({ message: error });
+  const defaultsForInsert = Object.fromEntries(
+    Object.entries(COLLECTION_HERO_DEFAULTS).filter(([field]) => !Object.hasOwn(changes, field))
+  );
+
+  const settings = await CollectionHeroSettings.findOneAndUpdate(
+    { key: COLLECTION_HERO_SETTINGS_KEY },
+    { $set: changes, $setOnInsert: { key: COLLECTION_HERO_SETTINGS_KEY, ...defaultsForInsert } },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: false }
+  ).lean();
+  res.json(collectionHeroPayload(settings));
 }));
 
 app.get('/api/carousel', requireDatabase, asyncRoute(async (_, res) => {
@@ -257,6 +326,11 @@ async function connectMongo() {
         passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 12)
       });
     }
+    await CollectionHeroSettings.updateOne(
+      { key: COLLECTION_HERO_SETTINGS_KEY },
+      { $setOnInsert: { ...COLLECTION_HERO_DEFAULTS } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
     lastMongoIssue = null;
     console.log('MongoDB connected.');
   } catch (error) {

@@ -11,7 +11,8 @@
 1. Store (`/`) fetches `GET /api/products` and shows a jewellery grid.
 2. Product view (`/products/:id`) fetches one product and adds it to a browser cart.
 3. Checkout (`/checkout`) lets customers increase, decrease, or remove bag items before posting customer/cart details to `POST /api/orders`; it then downloads `/api/orders/:id/invoice` as a PDF.
-4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, and order-status updates.
+4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and enables product upload/edit/delete, carousel image upload/edit/delete, order-status updates, and the persisted homepage collection-message controls.
+5. The storefront hero collection message (`CHERIE COLLECTION`, heading, and description) is stored in MongoDB. Admin can edit each text field or hide/show only the text overlay while keeping the carousel images visible.
 
 ## Setup
 - Backend: copy `backend/.env.example` to `backend/.env`, configure private `MONGODB_URI`, `JWT_SECRET`, and admin credentials, then `npm install` and `npm run dev`.
@@ -24,8 +25,8 @@
 - A valid-password login that returns a 5xx while `/api/health` says MongoDB is connected means the deployed backend is missing `JWT_SECRET`; add that server-side Render environment variable and redeploy. No secret is exposed by the health diagnostic.
 
 ## API
-- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
-- Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `GET /api/collection-hero`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `PATCH /api/collection-hero`, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo
 - `frontend/public/logo.png` is the round pink Cherie logo used in both customer and admin headers.

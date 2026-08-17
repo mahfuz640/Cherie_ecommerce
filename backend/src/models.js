@@ -1,5 +1,13 @@
 import mongoose from 'mongoose';
 
+export const COLLECTION_HERO_SETTINGS_KEY = 'collection-hero';
+export const COLLECTION_HERO_DEFAULTS = Object.freeze({
+  eyebrow: 'CHERIE COLLECTION',
+  heading: 'Made to be beloved always.',
+  description: 'Discover a piece made for your story.',
+  visible: true
+});
+
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, required: true, trim: true },
@@ -32,7 +40,16 @@ const carouselSchema = new mongoose.Schema({
   image: { type: String, required: true }, title: { type: String, trim: true }, subtitle: { type: String, trim: true }, link: { type: String, default: '#collection' }
 }, { timestamps: true });
 
+const collectionHeroSettingsSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true, immutable: true, default: COLLECTION_HERO_SETTINGS_KEY },
+  eyebrow: { type: String, required: true, trim: true, minlength: 1, maxlength: 80, default: COLLECTION_HERO_DEFAULTS.eyebrow },
+  heading: { type: String, required: true, trim: true, minlength: 1, maxlength: 160, default: COLLECTION_HERO_DEFAULTS.heading },
+  description: { type: String, required: true, trim: true, minlength: 1, maxlength: 360, default: COLLECTION_HERO_DEFAULTS.description },
+  visible: { type: Boolean, default: COLLECTION_HERO_DEFAULTS.visible }
+}, { timestamps: true });
+
 export const Product = mongoose.model('Product', productSchema);
 export const Admin = mongoose.model('Admin', adminSchema);
 export const Order = mongoose.model('Order', orderSchema);
 export const Carousel = mongoose.model('Carousel', carouselSchema);
+export const CollectionHeroSettings = mongoose.model('CollectionHeroSettings', collectionHeroSettingsSchema);

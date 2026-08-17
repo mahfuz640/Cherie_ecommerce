@@ -67,7 +67,9 @@ app.get('/api/health', (_, res) => res.status(200).json({
   status: 'online',
   provider: 'Groq',
   models: GROQ_MODELS,
-  database: databaseState()
+  database: databaseState(),
+  databaseConfigured: Boolean(normalizedMongoUri()),
+  databaseIssue: databaseState() === 'connected' ? null : lastMongoIssue
 }));
 
 app.get('/api/carousel', requireDatabase, asyncRoute(async (_, res) => {
@@ -186,12 +188,36 @@ app.use((error, _, res, next) => {
 });
 
 let reconnectTimer;
+let lastMongoIssue = null;
+
+function normalizedMongoUri() {
+  return (process.env.MONGODB_URI || '')
+    .trim()
+    .replace(/^MONGODB_URI=/, '')
+    .replace(/^['"]|['"]$/g, '');
+}
+
+function mongoIssueCode(error) {
+  const message = String(error?.message || '').toLowerCase();
+  if (!normalizedMongoUri()) return 'missing_mongodb_uri';
+  if (message.includes('authentication failed') || message.includes('bad auth')) return 'authentication_failed';
+  if (message.includes('querysrv') || message.includes('getaddrinfo') || message.includes('dns')) return 'dns_failure';
+  if (message.includes('could not connect to any servers') || message.includes('server selection') || message.includes('timed out')) {
+    return 'network_or_atlas_access';
+  }
+  if (message.includes('invalid') || message.includes('connection string')) return 'invalid_mongodb_uri';
+  return 'connection_failed';
+}
+
 async function connectMongo() {
   try {
-    if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required.');
-    await mongoose.connect(process.env.MONGODB_URI, {
+    const uri = normalizedMongoUri();
+    if (!uri) throw new Error('MONGODB_URI is required.');
+    await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000
+      connectTimeoutMS: 10000,
+      autoSelectFamily: true,
+      autoSelectFamilyAttemptTimeout: 1000
     });
 
     const email = (process.env.ADMIN_EMAIL || 'admin@cherie.com').toLowerCase();
@@ -201,9 +227,11 @@ async function connectMongo() {
         passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 12)
       });
     }
+    lastMongoIssue = null;
     console.log('MongoDB connected.');
   } catch (error) {
-    console.error(`MongoDB unavailable: ${error.message}`);
+    lastMongoIssue = mongoIssueCode(error);
+    console.error(`MongoDB unavailable [${lastMongoIssue}]: ${error.message}`);
     if (!reconnectTimer) {
       reconnectTimer = setTimeout(() => {
         reconnectTimer = undefined;

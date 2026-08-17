@@ -23,7 +23,7 @@
 - `backend/.env` is ignored by Git, so Render must receive `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in its own Environment settings. Database routes return a safe 503 JSON response while Atlas is unavailable instead of crashing the service.
 
 ## API
-- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, and configured `GROQ_MODELS`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo diagnostics: `database`, `databaseConfigured`, `databaseIssue`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `POST /api/orders`, `GET /api/orders/:id/invoice`.
 - Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo

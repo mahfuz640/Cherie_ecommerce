@@ -5,7 +5,7 @@
 - `backend/`: Express REST API with MongoDB Atlas/Mongoose, JWT auth, Multer image upload, and PDFKit invoices.
 - The visual language is Cherie: blush pink (`#f35f9b`), warm white, elegant serif headings.
 - Frontend is split into `components/`, `components/admin/`, `context/`, and `pages/`; `App.jsx` lazy-loads each route so Admin and checkout code are not downloaded on the initial shop view.
-- Storefront styling is a premium feminine jewellery boutique: deep berry announcement bar, wide blush/pink editorial hero with responsive outer margins and generous internal padding, subtle gold accents, gift/service strip, elevated product cards, and a polished checkout/admin surface. On phones, carousel images use their full natural aspect ratio and the text moves below the image so no product image is cropped.
+- Storefront styling is a premium feminine jewellery boutique: wide blush/pink editorial hero with responsive outer margins and generous internal padding, subtle gold accents, gift/service strip, elevated product cards, and a polished checkout/admin surface. Carousel images have no dark overlay; a text-only shadow preserves readable copy. On phones, carousel images use their full natural aspect ratio and the text moves below the image so no product image is cropped.
 
 ## Main flows
 1. Store (`/`) fetches `GET /api/products` and shows a jewellery grid.

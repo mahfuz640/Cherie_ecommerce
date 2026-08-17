@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, apiImg } from '../api';
+import './Hero.css';
 
 const defaults = {
   eyebrow: 'CHERIE COLLECTION',

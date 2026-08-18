@@ -9,11 +9,6 @@ export const COLLECTION_HERO_DEFAULTS = Object.freeze({
   announcementText: 'Complimentary gift wrapping on every Cherie order',
   announcementVisible: true
 });
-export const CAROUSEL_SETTINGS_KEY = 'carousel';
-export const CAROUSEL_SETTINGS_DEFAULTS = Object.freeze({
-  autoSlideSeconds: 5,
-  fixedSlideId: null
-});
 
 const persistentImageDataUrl = /^data:image\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i;
 const gridFsImageUrl = /^\/api\/images\/([a-f\d]{24})$/i;
@@ -87,12 +82,6 @@ const carouselSchema = new mongoose.Schema({
   title: { type: String, trim: true }, subtitle: { type: String, trim: true }, link: { type: String, default: '#collection' }
 }, { timestamps: true });
 
-const carouselSettingsSchema = new mongoose.Schema({
-  key: { type: String, required: true, unique: true, immutable: true, default: CAROUSEL_SETTINGS_KEY },
-  autoSlideSeconds: { type: Number, required: true, min: 1, max: 3600, default: CAROUSEL_SETTINGS_DEFAULTS.autoSlideSeconds },
-  fixedSlideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Carousel', default: CAROUSEL_SETTINGS_DEFAULTS.fixedSlideId }
-}, { timestamps: true });
-
 const collectionHeroSettingsSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, immutable: true, default: COLLECTION_HERO_SETTINGS_KEY },
   eyebrow: { type: String, required: true, trim: true, minlength: 1, maxlength: 80, default: COLLECTION_HERO_DEFAULTS.eyebrow },
@@ -107,5 +96,4 @@ export const Product = mongoose.model('Product', productSchema);
 export const Admin = mongoose.model('Admin', adminSchema);
 export const Order = mongoose.model('Order', orderSchema);
 export const Carousel = mongoose.model('Carousel', carouselSchema);
-export const CarouselSettings = mongoose.model('CarouselSettings', carouselSettingsSchema);
 export const CollectionHeroSettings = mongoose.model('CollectionHeroSettings', collectionHeroSettingsSchema);

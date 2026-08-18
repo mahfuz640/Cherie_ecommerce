@@ -4,6 +4,7 @@ import { api, apiImg } from '../api';
 import { clearAdminSession, getAdminToken, hasActiveAdminSession } from '../adminSession';
 import AnnouncementForm from '../components/admin/AnnouncementForm';
 import CarouselForm from '../components/admin/CarouselForm';
+import CarouselSettingsForm from '../components/admin/CarouselSettingsForm';
 import CollectionHeroForm from '../components/admin/CollectionHeroForm';
 import { OrderList, ProductList } from '../components/admin/AdminLists';
 import ProductForm from '../components/admin/ProductForm';
@@ -11,9 +12,11 @@ import Brand from '../components/Brand';
 import './Admin.css';
 import './AdminToast.css';
 
+const carouselSettingsFallback = { autoSlideSeconds: 5, fixedSlideId: null };
+
 export default function Admin() {
   const token = getAdminToken(), navigate = useNavigate();
-  const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null);
+  const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null), [carouselSettings, setCarouselSettings] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null), [editingSlide, setEditingSlide] = useState(null);
   const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState(''), [toastKey, setToastKey] = useState(0);
   const auth = { Authorization: `Bearer ${token}` }, jsonAuth = { ...auth, 'Content-Type': 'application/json' };
@@ -22,8 +25,8 @@ export default function Admin() {
   const showError = reason => { setNotice(''); setError(reason?.message || 'Something went wrong. Please try again.'); setToastKey(current => current + 1); };
   async function load() {
     try {
-      const [productData, orderData, slideData, heroData] = await Promise.all([api('/api/products'), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero')]);
-      setProducts(productData); setOrders(orderData); setSlides(slideData); setCollectionHero(heroData);
+      const [productData, orderData, slideData, heroData, carouselSettingsData] = await Promise.all([api('/api/products'), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero'), api('/api/carousel/settings').catch(() => carouselSettingsFallback)]);
+      setProducts(productData); setOrders(orderData); setSlides(slideData); setCollectionHero(heroData); setCarouselSettings(carouselSettingsData);
     } catch (reason) {
       if (reason.status === 401) {
         clearAdminSession();
@@ -129,7 +132,7 @@ export default function Admin() {
   }
   async function deleteSlide(slide) {
     if (!window.confirm('Remove this carousel image?')) return;
-    try { await api(`/api/carousel/${slide._id}`, { method: 'DELETE', headers: auth }); setSlides(current => current.filter(item => item._id !== slide._id)); if (editingSlide?._id === slide._id) { setEditingSlide(null); setSlideImage(''); } showNotice('Carousel image removed.'); }
+    try { await api(`/api/carousel/${slide._id}`, { method: 'DELETE', headers: auth }); setSlides(current => current.filter(item => item._id !== slide._id)); setCarouselSettings(current => current?.fixedSlideId === slide._id ? { ...current, fixedSlideId: null } : current); if (editingSlide?._id === slide._id) { setEditingSlide(null); setSlideImage(''); } showNotice('Carousel image removed. Fixed mode was cleared if this was the selected image.'); }
     catch (reason) { showError(reason); }
   }
   async function saveCollectionHero(event) {
@@ -148,6 +151,20 @@ export default function Admin() {
       setCollectionHero(updated); showNotice(updated.announcementVisible ? 'Announcement updated and visible.' : 'Announcement updated and hidden.');
     } catch (reason) { showError(reason); }
   }
+  async function saveCarouselSettings(event) {
+    event.preventDefault(); clearToast();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const autoSlideSeconds = Number(values.autoSlideSeconds);
+    if (!Number.isInteger(autoSlideSeconds) || autoSlideSeconds < 1 || autoSlideSeconds > 3600) {
+      showError(new Error('Auto-slide time must be a whole number between 1 and 3600 seconds.'));
+      return;
+    }
+    try {
+      const updated = await api('/api/carousel/settings', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ autoSlideSeconds, fixedSlideId: values.fixedSlideId || null }) });
+      setCarouselSettings(updated);
+      showNotice(updated.fixedSlideId ? 'Carousel controls saved. The selected image is fixed.' : 'Carousel controls saved. Automatic rotation is active.');
+    } catch (reason) { showError(reason); }
+  }
   async function changeStatus(order, status) {
     try { const updated = await api(`/api/orders/${order._id}/status`, { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ status }) }); setOrders(current => current.map(item => item._id === updated._id ? updated : item)); showNotice('Order status updated.'); }
     catch (reason) { showError(reason); }
@@ -156,5 +173,5 @@ export default function Admin() {
   const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); setRemoveProductImage(false); };
   const startEditSlide = slide => { setEditingSlide(slide); setSlideImage(slide.image); };
   const toastMessage = error || notice, toastIsError = Boolean(error);
-  return <main className="admin">{toastMessage && <div className={`admin-toast admin-toast--${toastIsError ? 'error' : 'success'}`} key={toastKey} role={toastIsError ? 'alert' : 'status'} aria-live={toastIsError ? 'assertive' : 'polite'} aria-atomic="true"><span>{toastMessage}</span><button type="button" aria-label="Dismiss notification" onClick={clearToast}>×</button></div>}<div className="admin-top"><Brand /><div className="admin-actions"><Link className="admin-main-page" to="/">Main Page</Link><button onClick={() => { clearAdminSession(); navigate('/admin/login', { replace: true }); }}>Sign out</button></div></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1><AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); showNotice('Product image will be removed when you save.'); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : (setSlideImage(''), showNotice('Selected carousel image removed.'))} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
+  return <main className="admin">{toastMessage && <div className={`admin-toast admin-toast--${toastIsError ? 'error' : 'success'}`} key={toastKey} role={toastIsError ? 'alert' : 'status'} aria-live={toastIsError ? 'assertive' : 'polite'} aria-atomic="true"><span>{toastMessage}</span><button type="button" aria-label="Dismiss notification" onClick={clearToast}>×</button></div>}<div className="admin-top"><Brand /><div className="admin-actions"><Link className="admin-main-page" to="/">Main Page</Link><button onClick={() => { clearAdminSession(); navigate('/admin/login', { replace: true }); }}>Sign out</button></div></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1><AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><CarouselSettingsForm settings={carouselSettings} slides={slides} onSave={saveCarouselSettings} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); showNotice('Product image will be removed when you save.'); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : (setSlideImage(''), showNotice('Selected carousel image removed.'))} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
 }

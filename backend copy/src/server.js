@@ -13,9 +13,6 @@ import {
   Admin,
   Order,
   Carousel,
-  CarouselSettings,
-  CAROUSEL_SETTINGS_DEFAULTS,
-  CAROUSEL_SETTINGS_KEY,
   CollectionHeroSettings,
   COLLECTION_HERO_DEFAULTS,
   COLLECTION_HERO_SETTINGS_KEY,
@@ -191,47 +188,6 @@ async function cleanupRemovedGridFsImages(previousImages, currentImages = []) {
   await Promise.all(removed.map(cleanupGridFsImageIfUnreferenced));
 }
 
-const carouselSettingsPayload = settings => ({
-  autoSlideSeconds: settings?.autoSlideSeconds ?? CAROUSEL_SETTINGS_DEFAULTS.autoSlideSeconds,
-  fixedSlideId: settings?.fixedSlideId ? String(settings.fixedSlideId) : null
-});
-
-async function carouselSettingsChanges(body) {
-  if (!body || Array.isArray(body) || typeof body !== 'object') {
-    return { error: 'Carousel settings must be a JSON object.' };
-  }
-
-  const allowedFields = ['autoSlideSeconds', 'fixedSlideId'];
-  const fields = Object.keys(body);
-  const unknownField = fields.find(field => !allowedFields.includes(field));
-  if (unknownField) return { error: `Unsupported carousel setting: ${unknownField}.` };
-  if (!fields.length) return { error: 'Provide at least one carousel setting to update.' };
-
-  const changes = {};
-  if (Object.hasOwn(body, 'autoSlideSeconds')) {
-    const seconds = body.autoSlideSeconds;
-    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 3600) {
-      return { error: 'Auto-slide time must be a whole number from 1 to 3600 seconds.' };
-    }
-    changes.autoSlideSeconds = seconds;
-  }
-
-  if (Object.hasOwn(body, 'fixedSlideId')) {
-    const fixedSlideId = body.fixedSlideId;
-    if (fixedSlideId === null || fixedSlideId === '') {
-      changes.fixedSlideId = null;
-    } else if (typeof fixedSlideId !== 'string' || !mongoose.isObjectIdOrHexString(fixedSlideId)) {
-      return { error: 'Fixed slide must be a valid carousel slide or be cleared.' };
-    } else {
-      const slide = await Carousel.exists({ _id: fixedSlideId });
-      if (!slide) return { error: 'The selected fixed slide no longer exists.' };
-      changes.fixedSlideId = slide._id;
-    }
-  }
-
-  return { changes };
-}
-
 const collectionHeroPayload = settings => ({
   eyebrow: settings?.eyebrow ?? COLLECTION_HERO_DEFAULTS.eyebrow,
   heading: settings?.heading ?? COLLECTION_HERO_DEFAULTS.heading,
@@ -348,28 +304,6 @@ app.get('/api/carousel', requireDatabase, asyncRoute(async (_, res) => {
   res.json(await Carousel.find().sort({ createdAt: -1 }));
 }));
 
-// Keep these static settings routes above /api/carousel/:id so "settings" is
-// never treated as a carousel document id.
-app.get('/api/carousel/settings', requireDatabase, asyncRoute(async (_, res) => {
-  const settings = await CarouselSettings.findOne({ key: CAROUSEL_SETTINGS_KEY }).lean();
-  res.json(carouselSettingsPayload(settings));
-}));
-
-app.patch('/api/carousel/settings', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const { changes, error } = await carouselSettingsChanges(req.body);
-  if (error) return res.status(400).json({ message: error });
-
-  const defaultsForInsert = Object.fromEntries(
-    Object.entries(CAROUSEL_SETTINGS_DEFAULTS).filter(([field]) => !Object.hasOwn(changes, field))
-  );
-  const settings = await CarouselSettings.findOneAndUpdate(
-    { key: CAROUSEL_SETTINGS_KEY },
-    { $set: changes, $setOnInsert: { key: CAROUSEL_SETTINGS_KEY, ...defaultsForInsert } },
-    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: false }
-  ).lean();
-  res.json(carouselSettingsPayload(settings));
-}));
-
 app.post('/api/carousel', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const error = await carouselImageError(req.body, { required: true });
   if (error) return res.status(400).json({ message: error });
@@ -390,10 +324,6 @@ app.delete('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async 
   const slide = await Carousel.findById(req.params.id);
   if (!slide) return res.status(404).json({ message: 'Slide not found.' });
   await Carousel.findByIdAndDelete(req.params.id);
-  await CarouselSettings.updateOne(
-    { key: CAROUSEL_SETTINGS_KEY, fixedSlideId: slide._id },
-    { $set: { fixedSlideId: null } }
-  );
   await cleanupGridFsImageIfUnreferenced(slide.image);
   res.status(204).end();
 }));
@@ -593,23 +523,6 @@ async function connectMongo() {
     await CollectionHeroSettings.updateOne(
       { key: COLLECTION_HERO_SETTINGS_KEY, announcementVisible: { $exists: false } },
       { $set: { announcementVisible: COLLECTION_HERO_DEFAULTS.announcementVisible } },
-      { runValidators: true }
-    );
-    await CarouselSettings.updateOne(
-      { key: CAROUSEL_SETTINGS_KEY },
-      { $setOnInsert: { key: CAROUSEL_SETTINGS_KEY, ...CAROUSEL_SETTINGS_DEFAULTS } },
-      { upsert: true, setDefaultsOnInsert: true }
-    );
-    // Existing settings documents may predate one of these controls. Fill only
-    // missing values so an administrator's saved preference is never replaced.
-    await CarouselSettings.updateOne(
-      { key: CAROUSEL_SETTINGS_KEY, autoSlideSeconds: { $exists: false } },
-      { $set: { autoSlideSeconds: CAROUSEL_SETTINGS_DEFAULTS.autoSlideSeconds } },
-      { runValidators: true }
-    );
-    await CarouselSettings.updateOne(
-      { key: CAROUSEL_SETTINGS_KEY, fixedSlideId: { $exists: false } },
-      { $set: { fixedSlideId: CAROUSEL_SETTINGS_DEFAULTS.fixedSlideId } },
       { runValidators: true }
     );
     lastMongoIssue = null;

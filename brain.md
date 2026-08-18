@@ -3,7 +3,7 @@
 ## Architecture
 - `frontend/`: React + Vite single-page shop and protected admin area.
 - `backend/`: Express REST API with MongoDB Atlas/Mongoose, JWT auth, Multer image upload, and PDFKit invoices.
-- The visual language is Cherie: blush pink (`#f35f9b`), warm white, elegant serif headings.
+- The visual language is Cherie: blush pink (`#f35f9b`), warm white, elegant serif headings. Carousel rotation is controlled by persistent settings: an admin-set interval or a fixed selected slide.
 - Frontend is split into `components/`, `components/admin/`, `context/`, and `pages/`; `App.jsx` lazy-loads each route so Admin and checkout code are not downloaded on the initial shop view.
 - Storefront styling is a premium feminine jewellery boutique: wide blush/pink editorial hero with responsive outer margins and generous internal padding, subtle gold accents, gift/service strip, elevated product cards, and a polished checkout/admin surface. The editable announcement bar scrolls right-to-left, pauses on hover, and respects reduced-motion preferences. Carousel images have no dark overlay; a text-only shadow preserves readable copy. On phones, carousel images use their full natural aspect ratio and the text moves below the image so no product image is cropped.
 
@@ -11,7 +11,7 @@
 1. Store (`/`) fetches `GET /api/products` and shows a jewellery grid.
 2. Product view (`/products/:id`) fetches one product and adds it to a browser cart.
 3. Checkout (`/checkout`) lets customers increase, decrease, or remove bag items before posting customer/cart details to `POST /api/orders`; it then downloads `/api/orders/:id/invoice` as a PDF.
-4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and keeps the admin signed in through reloads/back navigation until its expiry. A signed-in visitor is redirected from the login screen to the dashboard; only explicit Sign out clears the session. The dashboard includes a Main Page button while keeping the session active, and enables product upload/edit/delete, multi-image carousel upload/edit/delete, order-status updates, and the persisted homepage collection-message controls. Admin action feedback is shown as a temporary centered popup, including on mobile.
+4. Admin signs in at `/admin/login` with the fixed administrator account and a password only; the password field has an eye toggle to show or hide its value. JWT is stored in localStorage and keeps the admin signed in through reloads/back navigation until its expiry. A signed-in visitor is redirected from the login screen to the dashboard; only explicit Sign out clears the session. The dashboard includes a Main Page button while keeping the session active, and enables product upload/edit/delete, multi-image carousel upload/edit/delete, carousel timing (1–3600 seconds) and fixed-slide controls, order-status updates, and the persisted homepage collection-message controls. Admin action feedback is shown as a temporary centered popup, including on mobile.
 5. The storefront hero collection message (`CHERIE COLLECTION`, heading, and description) and top announcement bar are stored in MongoDB. Admin can edit each text field or hide/show the collection text overlay and announcement independently.
 
 ## Setup
@@ -27,8 +27,8 @@
 - For a Render Free web service, create an external HTTP monitor for `https://cherie-fonrtend.onrender.com/api/health` every 5 minutes. It provides inbound traffic before Render's 15-minute idle spin-down threshold, but a paid Render instance is required for a true always-on guarantee.
 
 ## API
-- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `GET /api/images/:id` (MongoDB GridFS image stream), `GET /api/collection-hero` (hero plus announcement text/visibility), `POST /api/orders`, `GET /api/orders/:id/invoice`.
-- Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `PATCH /api/collection-hero`, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
+- Public: `GET /api/health` (UptimeRobot-ready; returns `status`, `provider`, configured `GROQ_MODELS`, and safe Mongo/auth diagnostics: `database`, `databaseConfigured`, `databaseConfigSource`, `databaseIssue`, `authenticationConfigured`), `GET /api/products`, `GET /api/products/:id`, `GET /api/carousel`, `GET /api/carousel/settings` (auto-slide time and optional fixed slide), `GET /api/images/:id` (MongoDB GridFS image stream), `GET /api/collection-hero` (hero plus announcement text/visibility), `POST /api/orders`, `GET /api/orders/:id/invoice`.
+- Admin: `POST /api/auth/login`, products CRUD, carousel CRUD, `PATCH /api/carousel/settings`, `PATCH /api/collection-hero`, `POST /api/upload`, `GET /api/orders`, `PATCH /api/orders/:id/status`.
 
 ## Logo
 - `frontend/public/logo.png` is the round pink Cherie logo used in both customer and admin headers, and as the browser-tab/favicon image.

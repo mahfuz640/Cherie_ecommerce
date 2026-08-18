@@ -6,8 +6,10 @@ import morgan from 'morgan';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
+import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Server as SocketIOServer } from 'socket.io';
 import {
   Product,
   Admin,
@@ -27,6 +29,7 @@ import { requireAdmin } from './auth.js';
 import { createInvoice } from './invoice.js';
 
 const app = express();
+const httpServer = createServer(app);
 const port = Number(process.env.PORT) || 5000;
 const uploadsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'uploads');
 const GROQ_MODELS = (process.env.GROQ_MODELS || 'not-configured')
@@ -43,14 +46,27 @@ const allowedOrigins = new Set([...configuredOrigins, ...localOrigins]);
 const renderOrigin = /^https:\/\/[a-z0-9-]+\.onrender\.com$/i;
 const allowRenderOrigins = process.env.ALLOW_RENDER_ORIGINS !== 'false';
 
-app.use(cors({
-  origin(origin, callback) {
-    const isAllowed = !origin
-      || allowedOrigins.has(origin)
-      || (allowRenderOrigins && renderOrigin.test(origin));
-    callback(isAllowed ? null : new Error('Origin is not allowed by CORS.'), isAllowed);
-  }
-}));
+const corsOrigin = (origin, callback) => {
+  const isAllowed = !origin
+    || allowedOrigins.has(origin)
+    || (allowRenderOrigins && renderOrigin.test(origin));
+  callback(isAllowed ? null : new Error('Origin is not allowed by CORS.'), isAllowed);
+};
+const corsOptions = { origin: corsOrigin };
+const io = new SocketIOServer(httpServer, {
+  cors: { ...corsOptions, methods: ['GET', 'POST'] }
+});
+
+// This is a lightweight client heartbeat for an already-open storefront tab.
+// It does not carry credentials or store data, and it is not relied on as a
+// hosting uptime guarantee.
+io.on('connection', socket => {
+  socket.on('store:keepalive', () => {
+    socket.emit('store:alive', { timestamp: new Date().toISOString() });
+  });
+});
+
+app.use(cors(corsOptions));
 // New image uploads use multipart streams directly into GridFS, rather than a
 // JSON data URL. This compatibility parser is only for existing data:image
 // records and normal API payloads; file uploads do not pass through this limit.
@@ -114,6 +130,18 @@ const requireDatabase = (_, res, next) => {
 };
 
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+
+// Storefront and admin clients use this signal to refetch only the resources
+// that changed. Keep it deliberately payload-free: order/customer data and
+// authentication details must never travel in a broadcast event.
+function emitStoreUpdate(resources) {
+  const changedResources = [...new Set(resources)].filter(Boolean);
+  if (!changedResources.length) return;
+  io.emit('store:update', {
+    resources: changedResources,
+    timestamp: new Date().toISOString()
+  });
+}
 
 function imageBucket() {
   if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
@@ -318,6 +346,7 @@ app.patch('/api/collection-hero', requireAdmin, requireDatabase, asyncRoute(asyn
     { $set: changes, $setOnInsert: { key: COLLECTION_HERO_SETTINGS_KEY, ...defaultsForInsert } },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: false }
   ).lean();
+  emitStoreUpdate(['collectionHero']);
   res.json(collectionHeroPayload(settings));
 }));
 
@@ -367,13 +396,16 @@ app.patch('/api/carousel/settings', requireAdmin, requireDatabase, asyncRoute(as
     { $set: changes, $setOnInsert: { key: CAROUSEL_SETTINGS_KEY, ...defaultsForInsert } },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: false }
   ).lean();
+  emitStoreUpdate(['carouselSettings']);
   res.json(carouselSettingsPayload(settings));
 }));
 
 app.post('/api/carousel', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const error = await carouselImageError(req.body, { required: true });
   if (error) return res.status(400).json({ message: error });
-  res.status(201).json(await Carousel.create(req.body));
+  const slide = await Carousel.create(req.body);
+  emitStoreUpdate(['carousel']);
+  res.status(201).json(slide);
 }));
 
 app.patch('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
@@ -383,6 +415,7 @@ app.patch('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async (
   if (!previous) return res.status(404).json({ message: 'Slide not found.' });
   const slide = await Carousel.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   if (previous.image !== slide.image) await cleanupGridFsImageIfUnreferenced(previous.image);
+  emitStoreUpdate(['carousel']);
   res.json(slide);
 }));
 
@@ -390,11 +423,12 @@ app.delete('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async 
   const slide = await Carousel.findById(req.params.id);
   if (!slide) return res.status(404).json({ message: 'Slide not found.' });
   await Carousel.findByIdAndDelete(req.params.id);
-  await CarouselSettings.updateOne(
+  const settingsResult = await CarouselSettings.updateOne(
     { key: CAROUSEL_SETTINGS_KEY, fixedSlideId: slide._id },
     { $set: { fixedSlideId: null } }
   );
   await cleanupGridFsImageIfUnreferenced(slide.image);
+  emitStoreUpdate(settingsResult.modifiedCount ? ['carousel', 'carouselSettings'] : ['carousel']);
   res.status(204).end();
 }));
 
@@ -433,7 +467,9 @@ app.get('/api/products/:id', requireDatabase, asyncRoute(async (req, res) => {
 app.post('/api/products', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const error = await productImagesError(req.body);
   if (error) return res.status(400).json({ message: error });
-  res.status(201).json(await Product.create(req.body));
+  const product = await Product.create(req.body);
+  emitStoreUpdate(['products']);
+  res.status(201).json(product);
 }));
 
 app.patch('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
@@ -445,6 +481,7 @@ app.patch('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async (
   if (Object.hasOwn(req.body, 'images')) {
     await cleanupRemovedGridFsImages(previous.images || [], item.images || []);
   }
+  emitStoreUpdate(['products']);
   res.json(item);
 }));
 
@@ -453,6 +490,7 @@ app.delete('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async 
   if (!product) return res.status(404).json({ message: 'Product not found.' });
   await Product.findByIdAndDelete(req.params.id);
   await cleanupRemovedGridFsImages(product.images || []);
+  emitStoreUpdate(['products']);
   res.status(204).end();
 }));
 
@@ -482,6 +520,7 @@ app.post('/api/orders', requireDatabase, asyncRoute(async (req, res) => {
   });
   const subtotal = lines.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const order = await Order.create({ customer, items: lines, subtotal });
+  emitStoreUpdate(['orders']);
   res.status(201).json({ orderId: order._id, invoiceUrl: `/api/orders/${order._id}/invoice` });
 }));
 
@@ -496,7 +535,9 @@ app.get('/api/orders', requireAdmin, requireDatabase, asyncRoute(async (_, res) 
 
 app.patch('/api/orders/:id/status', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const order = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
-  order ? res.json(order) : res.status(404).json({ message: 'Order not found.' });
+  if (!order) return res.status(404).json({ message: 'Order not found.' });
+  emitStoreUpdate(['orders']);
+  res.json(order);
 }));
 
 app.use((error, _, res, next) => {
@@ -627,8 +668,8 @@ async function connectMongo() {
 }
 
 function start() {
-  const server = app.listen(port, () => console.log(`Cherie API online on :${port}`));
-  server.on('error', error => {
+  httpServer.listen(port, () => console.log(`Cherie API online on :${port}`));
+  httpServer.on('error', error => {
     console.error(`Server failed to start: ${error.message}`);
     process.exitCode = 1;
   });

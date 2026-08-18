@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, apiImg } from '../api';
+import { storeUpdateAffects, useStoreUpdates } from '../realtime';
 import './Hero.css';
 
 const defaults = {
@@ -38,13 +39,29 @@ export default function Hero() {
   const fixedSlide = carouselSettings.fixedSlideId ? availableSlides.find(slide => String(slide._id) === String(carouselSettings.fixedSlideId)) : null;
   const displaySlides = fixedSlide ? [fixedSlide] : availableSlides;
 
+  const loadSlides = useCallback(() => api('/api/carousel').then(data => {
+    setSlides(data);
+    setFailedSlideIds([]);
+  }).catch(() => setSlides([])), []);
+  const loadCollectionHero = useCallback(() => api('/api/collection-hero').then(data => {
+    setSettings({ ...defaults, ...data });
+  }).catch(() => {}), []);
+  const loadCarouselSettings = useCallback(() => api('/api/carousel/settings').then(data => {
+    setCarouselSettings(carouselSettingsFrom(data));
+  }).catch(() => {}), []);
+
   useEffect(() => {
-    let active = true;
-    api('/api/carousel').then(data => { if (active) setSlides(data); }).catch(() => { if (active) setSlides([]); });
-    api('/api/collection-hero').then(data => { if (active) setSettings({ ...defaults, ...data }); }).catch(() => {});
-    api('/api/carousel/settings').then(data => { if (active) setCarouselSettings(carouselSettingsFrom(data)); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
+    loadSlides();
+    loadCollectionHero();
+    loadCarouselSettings();
+  }, [loadCarouselSettings, loadCollectionHero, loadSlides]);
+  useStoreUpdates(useCallback(update => {
+    if (storeUpdateAffects(update, 'carousel')) {
+      loadSlides();
+      loadCarouselSettings();
+    }
+    if (storeUpdateAffects(update, 'collectionHero')) loadCollectionHero();
+  }, [loadCarouselSettings, loadCollectionHero, loadSlides]));
 
   useEffect(() => {
     if (fixedSlide) {

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, apiImg } from '../api';
 import { clearAdminSession, getAdminToken, hasActiveAdminSession } from '../adminSession';
+import { storeUpdateAffects, useStoreUpdates } from '../realtime';
 import AnnouncementForm from '../components/admin/AnnouncementForm';
 import CarouselForm from '../components/admin/CarouselForm';
 import CarouselSettingsForm from '../components/admin/CarouselSettingsForm';
@@ -19,10 +20,12 @@ export default function Admin() {
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null), [carouselSettings, setCarouselSettings] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null), [editingSlide, setEditingSlide] = useState(null);
   const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState(''), [toastKey, setToastKey] = useState(0);
+  const ownStoreUpdateUntil = useRef(0), realtimeReloadTimer = useRef();
   const auth = { Authorization: `Bearer ${token}` }, jsonAuth = { ...auth, 'Content-Type': 'application/json' };
   const clearToast = () => { setNotice(''); setError(''); };
   const showNotice = message => { setError(''); setNotice(message); setToastKey(current => current + 1); };
   const showError = reason => { setNotice(''); setError(reason?.message || 'Something went wrong. Please try again.'); setToastKey(current => current + 1); };
+  const suppressOwnStoreUpdate = () => { ownStoreUpdateUntil.current = Date.now() + 1500; };
   async function load() {
     try {
       const [productData, orderData, slideData, heroData, carouselSettingsData] = await Promise.all([api('/api/products'), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero'), api('/api/carousel/settings').catch(() => carouselSettingsFallback)]);
@@ -43,12 +46,23 @@ export default function Admin() {
     }
     load();
   }, [token]);
+  useStoreUpdates(update => {
+    if (!token || !storeUpdateAffects(update, 'products', 'orders', 'carousel', 'collectionHero')) return;
+    if (Date.now() < ownStoreUpdateUntil.current) return;
+    window.clearTimeout(realtimeReloadTimer.current);
+    realtimeReloadTimer.current = window.setTimeout(() => {
+      realtimeReloadTimer.current = undefined;
+      load();
+    }, 250);
+  });
+  useEffect(() => () => window.clearTimeout(realtimeReloadTimer.current), []);
   useEffect(() => {
     if (!notice && !error) return undefined;
     const timeout = window.setTimeout(clearToast, error ? 6500 : 4200);
     return () => window.clearTimeout(timeout);
   }, [notice, error, toastKey]);
   async function uploadImage(file) {
+    suppressOwnStoreUpdate();
     const form = new FormData();
     form.append('image', file);
     return api('/api/upload', { method: 'POST', headers: auth, body: form });
@@ -61,6 +75,7 @@ export default function Admin() {
   }
   async function saveProduct(event) {
     event.preventDefault(); clearToast();
+    suppressOwnStoreUpdate();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const payload = { ...values, price: Number(values.price), stock: Number(values.stock), featured: values.featured === 'on', images: removeProductImage ? [] : (productImage ? [productImage] : editingProduct?.images || []) };
     delete payload.image;
@@ -71,12 +86,14 @@ export default function Admin() {
   }
   async function deleteProduct(product) {
     if (!window.confirm(`Remove ${product.name}?`)) return;
+    suppressOwnStoreUpdate();
     try { await api(`/api/products/${product._id}`, { method: 'DELETE', headers: auth }); setProducts(current => current.filter(item => item._id !== product._id)); showNotice(`${product.name} removed.`); }
     catch (reason) { showError(reason); }
   }
   async function saveSlide(event, batchFiles) {
     event.preventDefault();
     clearToast();
+    suppressOwnStoreUpdate();
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
 
@@ -132,11 +149,13 @@ export default function Admin() {
   }
   async function deleteSlide(slide) {
     if (!window.confirm('Remove this carousel image?')) return;
+    suppressOwnStoreUpdate();
     try { await api(`/api/carousel/${slide._id}`, { method: 'DELETE', headers: auth }); setSlides(current => current.filter(item => item._id !== slide._id)); setCarouselSettings(current => current?.fixedSlideId === slide._id ? { ...current, fixedSlideId: null } : current); if (editingSlide?._id === slide._id) { setEditingSlide(null); setSlideImage(''); } showNotice('Carousel image removed. Fixed mode was cleared if this was the selected image.'); }
     catch (reason) { showError(reason); }
   }
   async function saveCollectionHero(event) {
     event.preventDefault(); clearToast();
+    suppressOwnStoreUpdate();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     try {
       const updated = await api('/api/collection-hero', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ ...values, visible: values.visible === 'on' }) });
@@ -145,6 +164,7 @@ export default function Admin() {
   }
   async function saveAnnouncement(event) {
     event.preventDefault(); clearToast();
+    suppressOwnStoreUpdate();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     try {
       const updated = await api('/api/collection-hero', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ announcementText: values.announcementText, announcementVisible: values.announcementVisible === 'on' }) });
@@ -153,6 +173,7 @@ export default function Admin() {
   }
   async function saveCarouselSettings(event) {
     event.preventDefault(); clearToast();
+    suppressOwnStoreUpdate();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const autoSlideSeconds = Number(values.autoSlideSeconds);
     if (!Number.isInteger(autoSlideSeconds) || autoSlideSeconds < 1 || autoSlideSeconds > 3600) {
@@ -166,6 +187,7 @@ export default function Admin() {
     } catch (reason) { showError(reason); }
   }
   async function changeStatus(order, status) {
+    suppressOwnStoreUpdate();
     try { const updated = await api(`/api/orders/${order._id}/status`, { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ status }) }); setOrders(current => current.map(item => item._id === updated._id ? updated : item)); showNotice('Order status updated.'); }
     catch (reason) { showError(reason); }
   }

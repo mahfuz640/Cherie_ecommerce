@@ -67,6 +67,7 @@ export default function Hero() {
   const [slideDirection, setSlideDirection] = useState('forward');
   const [outgoingSlide, setOutgoingSlide] = useState(null);
   const [transitionKey, setTransitionKey] = useState(0);
+  const [mobileMediaAspectRatio, setMobileMediaAspectRatio] = useState(null);
   const activeIndexRef = useRef(0);
   const transitionKeyRef = useRef(0);
   const availableSlidesRef = useRef([]);
@@ -180,18 +181,29 @@ export default function Hero() {
     setFailedSlideIds(current => current.includes(id) ? current : [...current, id]);
     setOutgoingSlide(null);
   };
+  // Mobile keeps one stable media canvas between slides. If the next image is
+  // still decoding (or has a different ratio), it cannot collapse the hero and
+  // flash the content below it. `contain` in CSS keeps every image uncropped.
+  const rememberMobileMediaAspectRatio = event => {
+    const { naturalHeight, naturalWidth } = event.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+    setMobileMediaAspectRatio(current => current || `${naturalWidth} / ${naturalHeight}`);
+  };
   const showControls = !fixedSlide && availableSlides.length > 1;
   const showPrevious = () => startTransition(activeIndexRef.current - 1, 'backward');
   const showNext = () => startTransition(activeIndexRef.current + 1, 'forward');
   const showSelected = slideIndex => startTransition(slideIndex, slideIndex < activeIndexRef.current ? 'backward' : 'forward');
   const transitionClass = `carousel-image--${carouselSettings.transitionEffect} carousel-image--${slideDirection}`;
   const activeOutgoingSlide = outgoingSlide?.token === transitionKey && String(outgoingSlide.slide?._id) !== String(slide._id) ? outgoingSlide : null;
-  const transitionStyle = { '--carousel-transition-duration': `${carouselSettings.transitionDurationMs}ms` };
+  const transitionStyle = {
+    '--carousel-transition-duration': `${carouselSettings.transitionDurationMs}ms`,
+    ...(mobileMediaAspectRatio ? { '--carousel-mobile-aspect-ratio': mobileMediaAspectRatio } : {})
+  };
 
   return <section className={`hero carousel${fixedSlide ? ' carousel--fixed' : ''}`}>
     <div className={`carousel-media carousel-media--${carouselSettings.transitionEffect}`} style={transitionStyle}>
       {activeOutgoingSlide && <img key={`outgoing-${activeOutgoingSlide.slide._id}-${activeOutgoingSlide.token}`} className={`carousel-image carousel-image--outgoing carousel-image--${carouselSettings.transitionEffect} carousel-image--${activeOutgoingSlide.direction}`} src={apiImg(activeOutgoingSlide.slide.image)} alt="" aria-hidden="true" onError={() => markImageFailed(activeOutgoingSlide.slide._id)} />}
-      <img key={`incoming-${slide._id}-${carouselSettings.transitionEffect}-${slideDirection}-${transitionKey}`} className={`carousel-image carousel-image--incoming ${transitionClass}`} src={apiImg(slide.image)} alt={slide.title || 'Cherie collection'} onAnimationEnd={() => clearOutgoingSlide(transitionKey)} onError={() => markImageFailed(slide._id)} />
+      <img key={`incoming-${slide._id}-${carouselSettings.transitionEffect}-${slideDirection}-${transitionKey}`} className={`carousel-image carousel-image--incoming ${transitionClass}`} src={apiImg(slide.image)} alt={slide.title || 'Cherie collection'} onLoad={rememberMobileMediaAspectRatio} onAnimationEnd={() => clearOutgoingSlide(transitionKey)} onError={() => markImageFailed(slide._id)} />
     </div>
     <div className="carousel-overlay" />
     <CollectionHeroCopy settings={settings} carousel link={slide.link || '#collection'} />

@@ -16,7 +16,9 @@ import {
   CollectionHeroSettings,
   COLLECTION_HERO_DEFAULTS,
   COLLECTION_HERO_SETTINGS_KEY,
-  isPersistentImageDataUrl
+  gridFsImageIdFromUrl,
+  isPersistentImageDataUrl,
+  isPersistentImageReference
 } from './models.js';
 import { requireAdmin } from './auth.js';
 import { createInvoice } from './invoice.js';
@@ -46,14 +48,52 @@ app.use(cors({
     callback(isAllowed ? null : new Error('Origin is not allowed by CORS.'), isAllowed);
   }
 }));
-app.use(express.json({ limit: '8mb' }));
+// New image uploads use multipart streams directly into GridFS, rather than a
+// JSON data URL. This compatibility parser is only for existing data:image
+// records and normal API payloads; file uploads do not pass through this limit.
+app.use(express.json({ limit: '20mb' }));
 app.use(morgan('dev'));
 app.use('/uploads', express.static(uploadsDirectory));
 
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_, file, callback) => callback(null, file.mimetype.startsWith('image/'))
+  // The storage engine pipes the incoming file straight into GridFS. There is
+  // intentionally no Multer file-size limit or in-memory image buffer.
+  storage: {
+    _handleFile(_, file, callback) {
+      let settled = false;
+      const finish = (error, info) => {
+        if (settled) return;
+        settled = true;
+        callback(error, info);
+      };
+
+      try {
+        const stream = imageBucket().openUploadStream(`image-${Date.now()}`, {
+          contentType: file.mimetype,
+          metadata: { originalName: file.originalname || 'image' }
+        });
+        stream.once('error', error => finish(error));
+        stream.once('finish', () => finish(null, {
+          id: stream.id,
+          filename: stream.filename,
+          contentType: file.mimetype,
+          length: stream.length
+        }));
+        file.stream.once('error', error => finish(error));
+        file.stream.pipe(stream);
+      } catch (error) {
+        finish(error);
+      }
+    },
+    _removeFile(_, file, callback) {
+      const id = file?.id && mongoose.isObjectIdOrHexString(file.id)
+        ? new mongoose.Types.ObjectId(file.id)
+        : null;
+      if (!id) return callback(null);
+      imageBucket().delete(id).then(() => callback(null), callback);
+    }
+  },
+  fileFilter: (_, file, callback) => callback(null, typeof file.mimetype === 'string' && file.mimetype.startsWith('image/'))
 });
 
 const databaseState = () => ({
@@ -72,28 +112,80 @@ const requireDatabase = (_, res, next) => {
 
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
-function carouselImageError(body, { required = false } = {}) {
+function imageBucket() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    const error = new Error('Database is temporarily unavailable. Please try again shortly.');
+    error.status = 503;
+    throw error;
+  }
+  return new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'images' });
+}
+
+function imageObjectIdFromUrl(value) {
+  const id = gridFsImageIdFromUrl(value);
+  return id ? new mongoose.Types.ObjectId(id) : null;
+}
+
+async function imageReferenceError(value, label) {
+  if (isPersistentImageDataUrl(value)) return null;
+  const id = imageObjectIdFromUrl(value);
+  if (!id || !isPersistentImageReference(value)) {
+    return `${label} must be an uploaded /api/images/:id URL or an existing data:image value.`;
+  }
+  const file = await mongoose.connection.db.collection('images.files').findOne(
+    { _id: id },
+    { projection: { _id: 1 } }
+  );
+  return file ? null : `${label} upload was not found. Upload the image again.`;
+}
+
+async function carouselImageError(body, { required = false } = {}) {
   if (!body || Array.isArray(body) || typeof body !== 'object') {
     return 'Request body must be a JSON object.';
   }
   if (!Object.hasOwn(body, 'image')) {
     return required ? 'A carousel image is required.' : null;
   }
-  if (!isPersistentImageDataUrl(body.image)) {
-    return 'Carousel image must be a Mongo-persistent data:image base64 value. Upload the image first.';
-  }
-  return null;
+  return imageReferenceError(body.image, 'Carousel image');
 }
 
-function productImagesError(body) {
+async function productImagesError(body) {
   if (!body || Array.isArray(body) || typeof body !== 'object') {
     return 'Request body must be a JSON object.';
   }
   if (!Object.hasOwn(body, 'images')) return null;
-  if (!Array.isArray(body.images) || !body.images.every(isPersistentImageDataUrl)) {
-    return 'Product images must be Mongo-persistent data:image base64 values. Use an empty image list to remove all images.';
-  }
+  if (!Array.isArray(body.images)) return 'Product images must be a list. Use an empty image list to remove all images.';
+  const errors = await Promise.all(body.images.map(image => imageReferenceError(image, 'Product image')));
+  const error = errors.find(Boolean);
+  if (error) return error;
   return null;
+}
+
+async function cleanupGridFsImageIfUnreferenced(imageUrl) {
+  const id = imageObjectIdFromUrl(imageUrl);
+  if (!id) return false;
+
+  const [productReference, carouselReference] = await Promise.all([
+    Product.exists({ images: imageUrl }),
+    Carousel.exists({ image: imageUrl })
+  ]);
+  if (productReference || carouselReference) return false;
+
+  try {
+    await imageBucket().delete(id);
+    return true;
+  } catch (error) {
+    // The database record has already changed. Do not turn a successful admin
+    // action into an error or remove another file; an orphan can be retried later.
+    console.warn(`GridFS image cleanup skipped for ${id}: ${error.message}`);
+    return false;
+  }
+}
+
+async function cleanupRemovedGridFsImages(previousImages, currentImages = []) {
+  const current = new Set(currentImages);
+  const removed = [...new Set(previousImages)].filter(image => !current.has(image));
+  await Promise.all(removed.map(cleanupGridFsImageIfUnreferenced));
 }
 
 const collectionHeroPayload = settings => ({
@@ -185,27 +277,54 @@ app.patch('/api/collection-hero', requireAdmin, requireDatabase, asyncRoute(asyn
   res.json(collectionHeroPayload(settings));
 }));
 
+app.get('/api/images/:id', requireDatabase, asyncRoute(async (req, res, next) => {
+  const id = imageObjectIdFromUrl(`/api/images/${req.params.id}`);
+  if (!id) return res.status(404).json({ message: 'Image not found.' });
+
+  const file = await mongoose.connection.db.collection('images.files').findOne(
+    { _id: id },
+    { projection: { contentType: 1, length: 1 } }
+  );
+  if (!file) return res.status(404).json({ message: 'Image not found.' });
+
+  res.set({
+    'Content-Type': file.contentType || 'application/octet-stream',
+    'Content-Length': String(file.length),
+    'Cache-Control': 'public, max-age=31536000, immutable'
+  });
+  const stream = imageBucket().openDownloadStream(id);
+  stream.once('error', error => {
+    if (res.headersSent) return res.destroy(error);
+    next(error);
+  });
+  stream.pipe(res);
+}));
+
 app.get('/api/carousel', requireDatabase, asyncRoute(async (_, res) => {
   res.json(await Carousel.find().sort({ createdAt: -1 }));
 }));
 
 app.post('/api/carousel', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const error = carouselImageError(req.body, { required: true });
+  const error = await carouselImageError(req.body, { required: true });
   if (error) return res.status(400).json({ message: error });
   res.status(201).json(await Carousel.create(req.body));
 }));
 
 app.patch('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const error = carouselImageError(req.body);
+  const error = await carouselImageError(req.body);
   if (error) return res.status(400).json({ message: error });
+  const previous = await Carousel.findById(req.params.id);
+  if (!previous) return res.status(404).json({ message: 'Slide not found.' });
   const slide = await Carousel.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-  slide ? res.json(slide) : res.status(404).json({ message: 'Slide not found.' });
+  if (previous.image !== slide.image) await cleanupGridFsImageIfUnreferenced(previous.image);
+  res.json(slide);
 }));
 
 app.delete('/api/carousel/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const slide = await Carousel.findById(req.params.id);
   if (!slide) return res.status(404).json({ message: 'Slide not found.' });
   await Carousel.findByIdAndDelete(req.params.id);
+  await cleanupGridFsImageIfUnreferenced(slide.image);
   res.status(204).end();
 }));
 
@@ -242,29 +361,34 @@ app.get('/api/products/:id', requireDatabase, asyncRoute(async (req, res) => {
 }));
 
 app.post('/api/products', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const error = productImagesError(req.body);
+  const error = await productImagesError(req.body);
   if (error) return res.status(400).json({ message: error });
   res.status(201).json(await Product.create(req.body));
 }));
 
 app.patch('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
-  const error = productImagesError(req.body);
+  const error = await productImagesError(req.body);
   if (error) return res.status(400).json({ message: error });
+  const previous = await Product.findById(req.params.id);
+  if (!previous) return res.status(404).json({ message: 'Product not found.' });
   const item = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-  item ? res.json(item) : res.status(404).json({ message: 'Product not found.' });
+  if (Object.hasOwn(req.body, 'images')) {
+    await cleanupRemovedGridFsImages(previous.images || [], item.images || []);
+  }
+  res.json(item);
 }));
 
 app.delete('/api/products/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ message: 'Product not found.' });
   await Product.findByIdAndDelete(req.params.id);
+  await cleanupRemovedGridFsImages(product.images || []);
   res.status(204).end();
 }));
 
-app.post('/api/upload', requireAdmin, upload.single('image'), (req, res) => {
+app.post('/api/upload', requireAdmin, requireDatabase, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Choose an image.' });
-  const url = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-  res.status(201).json({ url });
+  res.status(201).json({ url: `/api/images/${req.file.id}` });
 });
 
 app.post('/api/orders', requireDatabase, asyncRoute(async (req, res) => {
@@ -310,9 +434,14 @@ app.use((error, _, res, next) => {
   if (res.headersSent) return next(error);
   const isUploadError = error instanceof multer.MulterError;
   const isValidationError = error.name === 'ValidationError';
-  const status = isUploadError || isValidationError || error.name === 'CastError' ? 400 : error.status || 500;
+  const isJsonTooLarge = error.type === 'entity.too.large' || error.status === 413;
+  const status = isUploadError || isValidationError || error.name === 'CastError'
+    ? 400
+    : isJsonTooLarge ? 413 : error.status || 500;
   const message = isUploadError
-    ? (error.code === 'LIMIT_FILE_SIZE' ? 'Image must be 5 MB or smaller.' : 'Image upload failed.')
+    ? 'Image upload failed.'
+    : isJsonTooLarge
+      ? 'This JSON request is too large. Upload image files through /api/upload instead.'
     : (status >= 500 ? 'Server is temporarily unavailable. Please try again shortly.' : error.message);
   res.status(status).json({ message });
 });

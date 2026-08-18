@@ -11,13 +11,26 @@ export const COLLECTION_HERO_DEFAULTS = Object.freeze({
 });
 
 const persistentImageDataUrl = /^data:image\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i;
+const gridFsImageUrl = /^\/api\/images\/([a-f\d]{24})$/i;
 
-// Images stored in MongoDB must carry their bytes with the document. This keeps
-// them available after Render restarts instead of relying on its ephemeral disk.
+// Legacy images carry their bytes with the document. Keep accepting those values
+// while new uploads use the GridFS references below.
 export function isPersistentImageDataUrl(value) {
   if (typeof value !== 'string') return false;
   const match = value.match(persistentImageDataUrl);
   return Boolean(match && match[1].length % 4 === 0);
+}
+
+// New uploads live in GridFS and are referenced by this stable, public API URL.
+// Keep accepting the older in-document data URLs so existing product and carousel
+// records remain usable without a destructive data migration.
+export function gridFsImageIdFromUrl(value) {
+  if (typeof value !== 'string') return null;
+  return value.match(gridFsImageUrl)?.[1] || null;
+}
+
+export function isPersistentImageReference(value) {
+  return isPersistentImageDataUrl(value) || Boolean(gridFsImageIdFromUrl(value));
 }
 
 const productSchema = new mongoose.Schema({
@@ -30,8 +43,8 @@ const productSchema = new mongoose.Schema({
     type: [{
       type: String,
       validate: {
-        validator: isPersistentImageDataUrl,
-        message: 'Each product image must be a Mongo-persistent data:image base64 value.'
+        validator: isPersistentImageReference,
+        message: 'Each product image must be an uploaded /api/images/:id URL or an existing data:image value.'
       }
     }],
     default: []
@@ -62,8 +75,8 @@ const carouselSchema = new mongoose.Schema({
     type: String,
     required: [true, 'A carousel image is required.'],
     validate: {
-      validator: isPersistentImageDataUrl,
-      message: 'Carousel image must be a Mongo-persistent data:image base64 value.'
+      validator: isPersistentImageReference,
+      message: 'Carousel image must be an uploaded /api/images/:id URL or an existing data:image value.'
     }
   },
   title: { type: String, trim: true }, subtitle: { type: String, trim: true }, link: { type: String, default: '#collection' }

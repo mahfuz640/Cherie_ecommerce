@@ -17,6 +17,9 @@ import {
   Carousel,
   CarouselSettings,
   CAROUSEL_SETTINGS_DEFAULTS,
+  CAROUSEL_ALLOWED_TRANSITION_EFFECTS,
+  CAROUSEL_TRANSITION_DURATION_MIN_MS,
+  CAROUSEL_TRANSITION_DURATION_MAX_MS,
   CAROUSEL_SETTINGS_KEY,
   CollectionHeroSettings,
   COLLECTION_HERO_DEFAULTS,
@@ -221,7 +224,9 @@ async function cleanupRemovedGridFsImages(previousImages, currentImages = []) {
 
 const carouselSettingsPayload = settings => ({
   autoSlideSeconds: settings?.autoSlideSeconds ?? CAROUSEL_SETTINGS_DEFAULTS.autoSlideSeconds,
-  fixedSlideId: settings?.fixedSlideId ? String(settings.fixedSlideId) : null
+  fixedSlideId: settings?.fixedSlideId ? String(settings.fixedSlideId) : null,
+  transitionEffect: settings?.transitionEffect ?? CAROUSEL_SETTINGS_DEFAULTS.transitionEffect,
+  transitionDurationMs: settings?.transitionDurationMs ?? CAROUSEL_SETTINGS_DEFAULTS.transitionDurationMs
 });
 
 async function carouselSettingsChanges(body) {
@@ -229,7 +234,7 @@ async function carouselSettingsChanges(body) {
     return { error: 'Carousel settings must be a JSON object.' };
   }
 
-  const allowedFields = ['autoSlideSeconds', 'fixedSlideId'];
+  const allowedFields = ['autoSlideSeconds', 'fixedSlideId', 'transitionEffect', 'transitionDurationMs'];
   const fields = Object.keys(body);
   const unknownField = fields.find(field => !allowedFields.includes(field));
   if (unknownField) return { error: `Unsupported carousel setting: ${unknownField}.` };
@@ -255,6 +260,26 @@ async function carouselSettingsChanges(body) {
       if (!slide) return { error: 'The selected fixed slide no longer exists.' };
       changes.fixedSlideId = slide._id;
     }
+  }
+
+  if (Object.hasOwn(body, 'transitionEffect')) {
+    const transitionEffect = body.transitionEffect;
+    if (typeof transitionEffect !== 'string' || !CAROUSEL_ALLOWED_TRANSITION_EFFECTS.includes(transitionEffect)) {
+      return { error: 'Transition effect is not supported.' };
+    }
+    changes.transitionEffect = transitionEffect;
+  }
+
+  if (Object.hasOwn(body, 'transitionDurationMs')) {
+    const duration = body.transitionDurationMs;
+    if (!Number.isInteger(duration)
+      || duration < CAROUSEL_TRANSITION_DURATION_MIN_MS
+      || duration > CAROUSEL_TRANSITION_DURATION_MAX_MS) {
+      return {
+        error: `Transition duration must be a whole number from ${CAROUSEL_TRANSITION_DURATION_MIN_MS} to ${CAROUSEL_TRANSITION_DURATION_MAX_MS} milliseconds.`
+      };
+    }
+    changes.transitionDurationMs = duration;
   }
 
   return { changes };
@@ -651,6 +676,16 @@ async function connectMongo() {
     await CarouselSettings.updateOne(
       { key: CAROUSEL_SETTINGS_KEY, fixedSlideId: { $exists: false } },
       { $set: { fixedSlideId: CAROUSEL_SETTINGS_DEFAULTS.fixedSlideId } },
+      { runValidators: true }
+    );
+    await CarouselSettings.updateOne(
+      { key: CAROUSEL_SETTINGS_KEY, transitionEffect: { $exists: false } },
+      { $set: { transitionEffect: CAROUSEL_SETTINGS_DEFAULTS.transitionEffect } },
+      { runValidators: true }
+    );
+    await CarouselSettings.updateOne(
+      { key: CAROUSEL_SETTINGS_KEY, transitionDurationMs: { $exists: false } },
+      { $set: { transitionDurationMs: CAROUSEL_SETTINGS_DEFAULTS.transitionDurationMs } },
       { runValidators: true }
     );
     lastMongoIssue = null;

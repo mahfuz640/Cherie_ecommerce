@@ -10,9 +10,36 @@ export const COLLECTION_HERO_DEFAULTS = Object.freeze({
   announcementVisible: true
 });
 export const CAROUSEL_SETTINGS_KEY = 'carousel';
+// These are the current effects offered in the admin UI. The short legacy
+// names are accepted separately below so saved settings from older versions
+// remain readable and editable without a destructive migration.
+export const CAROUSEL_TRANSITION_EFFECTS = Object.freeze([
+  'slide-left', 'slide-right', 'slide-up', 'slide-down',
+  'push-left', 'push-right', 'push-up', 'push-down',
+  'fade', 'cross-fade',
+  'zoom-in', 'zoom-out', 'zoom-blur',
+  'pan-left', 'pan-right', 'pan-up', 'pan-down',
+  'swipe-left', 'swipe-right',
+  'wipe-left', 'wipe-right', 'wipe-up', 'wipe-down',
+  'rotate', 'flip-horizontal', 'flip-vertical',
+  'cube-left', 'cube-right', 'page-turn', 'roll', 'stretch', 'shrink',
+  'blur-transition', 'flash', 'glitch', 'light-leak',
+  'radial-wipe', 'circle-open', 'circle-close',
+  'split-horizontal', 'split-vertical',
+  'curtain', 'shutter', 'ripple', 'wave', 'morph'
+]);
+export const CAROUSEL_LEGACY_TRANSITION_EFFECTS = Object.freeze(['slide', 'zoom', 'reveal']);
+export const CAROUSEL_ALLOWED_TRANSITION_EFFECTS = Object.freeze([
+  ...CAROUSEL_TRANSITION_EFFECTS,
+  ...CAROUSEL_LEGACY_TRANSITION_EFFECTS
+]);
+export const CAROUSEL_TRANSITION_DURATION_MIN_MS = 150;
+export const CAROUSEL_TRANSITION_DURATION_MAX_MS = 5000;
 export const CAROUSEL_SETTINGS_DEFAULTS = Object.freeze({
   autoSlideSeconds: 5,
-  fixedSlideId: null
+  fixedSlideId: null,
+  transitionEffect: 'fade',
+  transitionDurationMs: 800
 });
 
 const persistentImageDataUrl = /^data:image\/[a-z0-9][a-z0-9.+-]*;base64,([A-Za-z0-9+/]+={0,2})$/i;
@@ -90,7 +117,20 @@ const carouselSchema = new mongoose.Schema({
 const carouselSettingsSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, immutable: true, default: CAROUSEL_SETTINGS_KEY },
   autoSlideSeconds: { type: Number, required: true, min: 1, max: 3600, default: CAROUSEL_SETTINGS_DEFAULTS.autoSlideSeconds },
-  fixedSlideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Carousel', default: CAROUSEL_SETTINGS_DEFAULTS.fixedSlideId }
+  fixedSlideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Carousel', default: CAROUSEL_SETTINGS_DEFAULTS.fixedSlideId },
+  transitionEffect: {
+    type: String,
+    required: true,
+    enum: CAROUSEL_ALLOWED_TRANSITION_EFFECTS,
+    default: CAROUSEL_SETTINGS_DEFAULTS.transitionEffect
+  },
+  transitionDurationMs: {
+    type: Number,
+    required: true,
+    min: CAROUSEL_TRANSITION_DURATION_MIN_MS,
+    max: CAROUSEL_TRANSITION_DURATION_MAX_MS,
+    default: CAROUSEL_SETTINGS_DEFAULTS.transitionDurationMs
+  }
 }, { timestamps: true });
 
 const collectionHeroSettingsSchema = new mongoose.Schema({

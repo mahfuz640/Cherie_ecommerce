@@ -13,7 +13,7 @@ import Brand from '../components/Brand';
 import './Admin.css';
 import './AdminToast.css';
 
-const carouselSettingsFallback = { autoSlideSeconds: 5, fixedSlideId: null };
+const carouselSettingsFallback = { autoSlideSeconds: 5, fixedSlideId: null, transitionEffect: 'fade', transitionDurationMs: 800 };
 
 export default function Admin() {
   const token = getAdminToken(), navigate = useNavigate();
@@ -47,7 +47,7 @@ export default function Admin() {
     load();
   }, [token]);
   useStoreUpdates(update => {
-    if (!token || !storeUpdateAffects(update, 'products', 'orders', 'carousel', 'collectionHero')) return;
+    if (!token || !storeUpdateAffects(update, 'products', 'orders', 'carousel', 'carouselSettings', 'collectionHero')) return;
     if (Date.now() < ownStoreUpdateUntil.current) return;
     window.clearTimeout(realtimeReloadTimer.current);
     realtimeReloadTimer.current = window.setTimeout(() => {
@@ -180,8 +180,13 @@ export default function Admin() {
       showError(new Error('Auto-slide time must be a whole number between 1 and 3600 seconds.'));
       return;
     }
+    const transitionDurationMs = Number(values.transitionDurationMs);
+    if (!Number.isInteger(transitionDurationMs) || transitionDurationMs < 150 || transitionDurationMs > 5000) {
+      showError(new Error('Transition speed must be a whole number between 150 and 5000 milliseconds.'));
+      return;
+    }
     try {
-      const updated = await api('/api/carousel/settings', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ autoSlideSeconds, fixedSlideId: values.fixedSlideId || null }) });
+      const updated = await api('/api/carousel/settings', { method: 'PATCH', headers: jsonAuth, body: JSON.stringify({ autoSlideSeconds, fixedSlideId: values.fixedSlideId || null, transitionEffect: values.transitionEffect || 'fade', transitionDurationMs }) });
       setCarouselSettings(updated);
       showNotice(updated.fixedSlideId ? 'Carousel controls saved. The selected image is fixed.' : 'Carousel controls saved. Automatic rotation is active.');
     } catch (reason) { showError(reason); }

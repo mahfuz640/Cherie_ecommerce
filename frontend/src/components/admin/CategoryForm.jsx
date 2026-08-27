@@ -1,0 +1,8 @@
+import { useState } from 'react';
+import ImageUploadControl from './ImageUploadControl';
+import './CategoryForm.css';
+
+export default function CategoryForm({ image, uploading, categories, apiImg, onUpload, onRemoveImage, onSave, onDelete }) {
+  const [failedImages, setFailedImages] = useState({});
+  return <section className="admin-form category-manager"><div className="category-manager-heading"><div><p className="eyebrow">PRODUCT GROUPS</p><h2>Create a category</h2></div><p>Add the category first, then select it when publishing a product.</p></div><form onSubmit={onSave}><label className="admin-field"><span>Category name</span><input name="name" required maxLength="80" placeholder="e.g. Handbags" /></label><div className="category-image-field"><ImageUploadControl image={image} label={uploading ? 'Uploading category image…' : 'Upload category image'} onUpload={onUpload} onRemove={onRemoveImage} required /></div>{image && <div className="category-upload-preview"><img src={apiImg(image)} alt="New category preview" /><span>Category image ready</span></div>}<button className="button" disabled={!image || uploading}>{uploading ? 'Uploading…' : 'Create category'}</button></form><div className="category-admin-grid">{categories.length ? categories.map(category => <article key={category._id}><div>{!failedImages[category._id] ? <img src={apiImg(category.image)} alt="" onError={() => setFailedImages(current => ({ ...current, [category._id]: true }))} /> : <span>✦</span>}</div><b>{category.name}</b><button type="button" onClick={() => onDelete(category)}>Remove</button></article>) : <p className="category-empty">No custom categories yet. Create your first one above.</p>}</div></section>;
+}

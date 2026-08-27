@@ -7,6 +7,7 @@ import AnnouncementForm from '../components/admin/AnnouncementForm';
 import CarouselForm from '../components/admin/CarouselForm';
 import CarouselSettingsForm from '../components/admin/CarouselSettingsForm';
 import CollectionHeroForm from '../components/admin/CollectionHeroForm';
+import CategoryForm from '../components/admin/CategoryForm';
 import { OrderList, ProductList } from '../components/admin/AdminLists';
 import ProductForm from '../components/admin/ProductForm';
 import Brand from '../components/Brand';
@@ -17,9 +18,9 @@ const carouselSettingsFallback = { autoSlideSeconds: 5, fixedSlideId: null, tran
 
 export default function Admin() {
   const token = getAdminToken(), navigate = useNavigate();
-  const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null), [carouselSettings, setCarouselSettings] = useState(null);
+  const [products, setProducts] = useState([]), [categories, setCategories] = useState([]), [orders, setOrders] = useState([]), [slides, setSlides] = useState([]), [collectionHero, setCollectionHero] = useState(null), [carouselSettings, setCarouselSettings] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null), [editingSlide, setEditingSlide] = useState(null);
-  const [productImage, setProductImage] = useState(''), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState(''), [toastKey, setToastKey] = useState(0);
+  const [productImage, setProductImage] = useState(''), [categoryImage, setCategoryImage] = useState(''), [categoryUploading, setCategoryUploading] = useState(false), [slideImage, setSlideImage] = useState(''), [removeProductImage, setRemoveProductImage] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState(''), [toastKey, setToastKey] = useState(0);
   const ownStoreUpdateUntil = useRef(0), realtimeReloadTimer = useRef();
   const auth = { Authorization: `Bearer ${token}` }, jsonAuth = { ...auth, 'Content-Type': 'application/json' };
   const clearToast = () => { setNotice(''); setError(''); };
@@ -28,8 +29,8 @@ export default function Admin() {
   const suppressOwnStoreUpdate = () => { ownStoreUpdateUntil.current = Date.now() + 1500; };
   async function load() {
     try {
-      const [productData, orderData, slideData, heroData, carouselSettingsData] = await Promise.all([api('/api/products'), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero'), api('/api/carousel/settings').catch(() => carouselSettingsFallback)]);
-      setProducts(productData); setOrders(orderData); setSlides(slideData); setCollectionHero(heroData); setCarouselSettings(carouselSettingsData);
+      const [productData, categoryData, orderData, slideData, heroData, carouselSettingsData] = await Promise.all([api('/api/products'), api('/api/categories').catch(() => []), api('/api/orders', { headers: auth }), api('/api/carousel'), api('/api/collection-hero'), api('/api/carousel/settings').catch(() => carouselSettingsFallback)]);
+      setProducts(productData); setCategories(categoryData); setOrders(orderData); setSlides(slideData); setCollectionHero(heroData); setCarouselSettings(carouselSettingsData);
     } catch (reason) {
       if (reason.status === 401) {
         clearAdminSession();
@@ -47,7 +48,7 @@ export default function Admin() {
     load();
   }, [token]);
   useStoreUpdates(update => {
-    if (!token || !storeUpdateAffects(update, 'products', 'orders', 'carousel', 'carouselSettings', 'collectionHero')) return;
+    if (!token || !storeUpdateAffects(update, 'products', 'categories', 'orders', 'carousel', 'carouselSettings', 'collectionHero')) return;
     if (Date.now() < ownStoreUpdateUntil.current) return;
     window.clearTimeout(realtimeReloadTimer.current);
     realtimeReloadTimer.current = window.setTimeout(() => {
@@ -89,6 +90,35 @@ export default function Admin() {
     suppressOwnStoreUpdate();
     try { await api(`/api/products/${product._id}`, { method: 'DELETE', headers: auth }); setProducts(current => current.filter(item => item._id !== product._id)); showNotice(`${product.name} removed.`); }
     catch (reason) { showError(reason); }
+  }
+  async function uploadCategoryImage(file) {
+    if (!file) return;
+    setCategoryImage('');
+    setCategoryUploading(true);
+    try { await upload(file, setCategoryImage); }
+    finally { setCategoryUploading(false); }
+  }
+  async function saveCategory(event) {
+    event.preventDefault(); clearToast();
+    if (categoryUploading) return showError(new Error('Wait for the category image upload to finish.'));
+    if (!categoryImage) return showError(new Error('Upload a category image first.'));
+    suppressOwnStoreUpdate();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    try {
+      const created = await api('/api/categories', { method: 'POST', headers: jsonAuth, body: JSON.stringify({ name: values.name, image: categoryImage }) });
+      setCategories(current => [...current, created]); setCategoryImage(''); form.reset();
+      showNotice('Category created. You can now select it in Add a new product.');
+    } catch (reason) { showError(reason); }
+  }
+  async function deleteCategory(category) {
+    if (!window.confirm(`Remove the ${category.name} category?`)) return;
+    suppressOwnStoreUpdate();
+    try {
+      await api(`/api/categories/${category._id}`, { method: 'DELETE', headers: auth });
+      setCategories(current => current.filter(item => item._id !== category._id));
+      showNotice(`${category.name} removed.`);
+    } catch (reason) { showError(reason); }
   }
   async function saveSlide(event, batchFiles) {
     event.preventDefault();
@@ -200,5 +230,5 @@ export default function Admin() {
   const startEditProduct = product => { setEditingProduct(product); setProductImage(product.images?.[0] || ''); setRemoveProductImage(false); };
   const startEditSlide = slide => { setEditingSlide(slide); setSlideImage(slide.image); };
   const toastMessage = error || notice, toastIsError = Boolean(error);
-  return <main className="admin">{toastMessage && <div className={`admin-toast admin-toast--${toastIsError ? 'error' : 'success'}`} key={toastKey} role={toastIsError ? 'alert' : 'status'} aria-live={toastIsError ? 'assertive' : 'polite'} aria-atomic="true"><span>{toastMessage}</span><button type="button" aria-label="Dismiss notification" onClick={clearToast}>×</button></div>}<div className="admin-top"><Brand /><div className="admin-actions"><Link className="admin-main-page" to="/">Main Page</Link><button onClick={() => { clearAdminSession(); navigate('/admin/login', { replace: true }); }}>Sign out</button></div></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1><AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><CarouselSettingsForm settings={carouselSettings} slides={slides} onSave={saveCarouselSettings} /><ProductForm editing={editingProduct} image={productImage} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); showNotice('Product image will be removed when you save.'); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : (setSlideImage(''), showNotice('Selected carousel image removed.'))} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
+  return <main className="admin">{toastMessage && <div className={`admin-toast admin-toast--${toastIsError ? 'error' : 'success'}`} key={toastKey} role={toastIsError ? 'alert' : 'status'} aria-live={toastIsError ? 'assertive' : 'polite'} aria-atomic="true"><span>{toastMessage}</span><button type="button" aria-label="Dismiss notification" onClick={clearToast}>×</button></div>}<div className="admin-top"><Brand /><div className="admin-actions"><Link className="admin-main-page" to="/">Main Page</Link><button onClick={() => { clearAdminSession(); navigate('/admin/login', { replace: true }); }}>Sign out</button></div></div><p className="eyebrow">DASHBOARD</p><h1>Manage collection</h1><AnnouncementForm settings={collectionHero} onSave={saveAnnouncement} /><CollectionHeroForm settings={collectionHero} onSave={saveCollectionHero} /><CarouselSettingsForm settings={carouselSettings} slides={slides} onSave={saveCarouselSettings} /><ProductForm editing={editingProduct} image={productImage} categories={categories} categoryManager={<CategoryForm image={categoryImage} uploading={categoryUploading} categories={categories} apiImg={apiImg} onUpload={uploadCategoryImage} onRemoveImage={() => setCategoryImage('')} onSave={saveCategory} onDelete={deleteCategory} />} onUpload={file => { setRemoveProductImage(false); upload(file, setProductImage); }} onRemoveImage={() => { setProductImage(''); setRemoveProductImage(true); showNotice('Product image will be removed when you save.'); }} onSave={saveProduct} onCancel={() => { setEditingProduct(null); setProductImage(''); setRemoveProductImage(false); }} /><CarouselForm editing={editingSlide} image={slideImage} onUpload={file => upload(file, setSlideImage)} onRemoveImage={() => editingSlide ? deleteSlide(editingSlide) : (setSlideImage(''), showNotice('Selected carousel image removed.'))} onSave={saveSlide} onCancel={() => { setEditingSlide(null); setSlideImage(''); }} slides={slides} onEdit={startEditSlide} onDelete={deleteSlide} apiImg={apiImg} /><ProductList products={products} onEdit={startEditProduct} onDelete={deleteProduct} /><OrderList orders={orders} onStatusChange={changeStatus} /></main>;
 }

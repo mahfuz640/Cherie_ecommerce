@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Server as SocketIOServer } from 'socket.io';
 import {
   Product,
+  Category,
   Admin,
   Order,
   Carousel,
@@ -199,11 +200,12 @@ async function cleanupGridFsImageIfUnreferenced(imageUrl) {
   const id = imageObjectIdFromUrl(imageUrl);
   if (!id) return false;
 
-  const [productReference, carouselReference] = await Promise.all([
+  const [productReference, carouselReference, categoryReference] = await Promise.all([
     Product.exists({ images: imageUrl }),
-    Carousel.exists({ image: imageUrl })
+    Carousel.exists({ image: imageUrl }),
+    Category.exists({ image: imageUrl })
   ]);
-  if (productReference || carouselReference) return false;
+  if (productReference || carouselReference || categoryReference) return false;
 
   try {
     await imageBucket().delete(id);
@@ -482,6 +484,44 @@ app.post('/api/auth/login', requireDatabase, asyncRoute(async (req, res) => {
 app.get('/api/products', requireDatabase, asyncRoute(async (req, res) => {
   const query = req.query.category ? { category: req.query.category } : {};
   res.json(await Product.find(query).sort({ featured: -1, createdAt: -1 }));
+}));
+
+app.get('/api/categories', requireDatabase, asyncRoute(async (_, res) => {
+  res.json(await Category.find().sort({ createdAt: 1 }));
+}));
+
+app.post('/api/categories', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ message: 'Category name is required.' });
+  if (name.length > 80) return res.status(400).json({ message: 'Category name must be 80 characters or fewer.' });
+  const imageError = await imageReferenceError(req.body?.image, 'Category image');
+  if (imageError) return res.status(400).json({ message: imageError });
+  const escapedName = name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+  if (await Category.exists({ name: { $regex: '^' + escapedName + '$', $options: 'i' } })) {
+    return res.status(409).json({ message: 'A category with this name already exists.' });
+  }
+  let category;
+  try {
+    category = await Category.create({ name, image: req.body.image });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'A category with this name already exists.' });
+    throw error;
+  }
+  emitStoreUpdate(['categories']);
+  res.status(201).json(category);
+}));
+
+app.delete('/api/categories/:id', requireAdmin, requireDatabase, asyncRoute(async (req, res) => {
+  const category = await Category.findById(req.params.id);
+  if (!category) return res.status(404).json({ message: 'Category not found.' });
+  const escapedName = category.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+  if (await Product.exists({ category: { $regex: '^' + escapedName + '$', $options: 'i' } })) {
+    return res.status(409).json({ message: 'Move or remove products in this category before deleting it.' });
+  }
+  await Category.findByIdAndDelete(category._id);
+  await cleanupGridFsImageIfUnreferenced(category.image);
+  emitStoreUpdate(['categories']);
+  res.status(204).end();
 }));
 
 app.get('/api/products/:id', requireDatabase, asyncRoute(async (req, res) => {

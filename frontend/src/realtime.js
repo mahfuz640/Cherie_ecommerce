@@ -10,6 +10,7 @@ const keepaliveInterval = 4 * 60 * 1000;
 
 const aliases = {
   products: ['product', 'products'],
+  categories: ['category', 'categories'],
   carousel: ['carousel', 'carousels', 'slide', 'slides', 'carouselsettings', 'carouselsetting'],
   collectionHero: ['collectionhero', 'collectionheroes', 'hero', 'announcement'],
   orders: ['order', 'orders']

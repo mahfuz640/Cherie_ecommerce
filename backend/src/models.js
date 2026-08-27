@@ -85,6 +85,18 @@ const productSchema = new mongoose.Schema({
   featured: { type: Boolean, default: false }
 }, { timestamps: true });
 
+const categorySchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true, trim: true, minlength: 1, maxlength: 80 },
+  image: {
+    type: String,
+    required: [true, 'A category image is required.'],
+    validate: {
+      validator: isPersistentImageReference,
+      message: 'Category image must be an uploaded /api/images/:id URL or an existing data:image value.'
+    }
+  }
+}, { timestamps: true });
+
 const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true }
@@ -148,6 +160,7 @@ const collectionHeroSettingsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const Product = mongoose.model('Product', productSchema);
+export const Category = mongoose.model('Category', categorySchema);
 export const Admin = mongoose.model('Admin', adminSchema);
 export const Order = mongoose.model('Order', orderSchema);
 export const Carousel = mongoose.model('Carousel', carouselSchema);

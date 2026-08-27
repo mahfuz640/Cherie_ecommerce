@@ -1,0 +1,6 @@
+import Layout from '../components/Layout';
+import './ShippingPolicy.css';
+
+export default function ReturnExchange() {
+  return <Layout><section className="policy-hero"><h1>Return and Exchange</h1></section><main className="policy-content return-policy"><h2>Refund &amp; Return Policy - Cheries</h2><p>Thank you for shopping at <strong>Cheries</strong>. Please read this policy carefully before completing your purchase.</p><h2>No Returns / No Refunds</h2><p>All sales at <strong>Cheries</strong> are final. We <strong>do not</strong> offer returns, refunds, or exchanges for any products once the purchase is completed and the item has been dispatched or picked up.</p><p>By making a purchase on our website, you acknowledge and agree that:</p><p>Items cannot be returned for a change of mind.</p><p>We do not offer refunds if you find the same product at a lower price elsewhere.</p><p>We do not offer exchanges for different colors, sizes, or models after the order is processed.</p></main></Layout>;
+}

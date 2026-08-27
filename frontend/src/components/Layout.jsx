@@ -1,23 +1,19 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, money } from '../api';
 import { CartContext } from '../context/CartContext';
 import { storeUpdateAffects, useStoreUpdates } from '../realtime';
 import Brand from './Brand';
+import CartRows from './CartRows';
 import './Announcement.css';
 import './Navigation.css';
 
-const defaultAnnouncement = { text: 'Complimentary gift wrapping on every Cherie order', visible: true };
-
+const fallback = { text: 'Complimentary gift wrapping on every Cherie order', visible: true };
 export default function Layout({ children }) {
-  const { count } = useContext(CartContext);
-  const [announcement, setAnnouncement] = useState(defaultAnnouncement);
-  const loadAnnouncement = useCallback(() => api('/api/collection-hero').then(settings => {
-    setAnnouncement({ text: settings.announcementText || defaultAnnouncement.text, visible: settings.announcementVisible ?? defaultAnnouncement.visible });
-  }).catch(() => {}), []);
-  useEffect(() => { loadAnnouncement(); }, [loadAnnouncement]);
-  useStoreUpdates(useCallback(update => {
-    if (storeUpdateAffects(update, 'collectionHero')) loadAnnouncement();
-  }, [loadAnnouncement]));
-  return <>{announcement.visible && <div className="announcement announcement-scroll"><span className="announcement-track">{announcement.text}</span></div>}<header><Brand /><nav><Link to="/">Collection</Link><Link to="/checkout">Bag <span>{count}</span></Link><Link to="/admin/login">Admin</Link></nav></header>{children}<footer><div className="footer-grid"><div><Brand /><p>Jewellery made for your unforgettable moments.</p></div><div><h3>Customer care</h3><p>Personal styling<br />Gift-ready packaging<br />Secure local checkout</p></div><div><h3>Cherie promise</h3><p>Thoughtfully selected pieces for the women you love — including you.</p></div></div><small>Copyright {new Date().getFullYear()} Cherie. Beloved Always.</small></footer></>;
+  const { cart, count } = useContext(CartContext), [cartOpen, setCartOpen] = useState(false), [announcement, setAnnouncement] = useState(fallback);
+  const load = useCallback(() => api('/api/collection-hero').then(settings => setAnnouncement({ text: settings.announcementText || fallback.text, visible: settings.announcementVisible ?? fallback.visible })).catch(() => {}), []);
+  useEffect(() => { load(); }, [load]);
+  useStoreUpdates(useCallback(update => { if (storeUpdateAffects(update, 'collectionHero')) load(); }, [load]));
+  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  return <>{announcement.visible && <div className="announcement announcement-scroll"><span className="announcement-track">{announcement.text}</span></div>}<header><Brand /><nav><Link to="/#collection">Women</Link><button className="bag-button" onClick={() => setCartOpen(true)}>Bag <span>{count}</span></button><Link to="/admin/login">Admin</Link></nav></header>{cartOpen && <div className="cart-backdrop" onClick={() => setCartOpen(false)} />}<aside className={`cart-drawer ${cartOpen ? 'open' : ''}`} aria-hidden={!cartOpen}><div className="cart-drawer-head"><div><p className="eyebrow">YOUR SELECTION</p><h2>Shopping bag</h2></div><button onClick={() => setCartOpen(false)}>×</button></div><CartRows /><div className="drawer-total"><span>Subtotal</span><b>{money(total)}</b></div><p className="drawer-note">Delivery charge is calculated at checkout.</p><Link className={`button ${!cart.length ? 'disabled-link' : ''}`} to="/checkout" onClick={event => { if (!cart.length) event.preventDefault(); else setCartOpen(false); }}>Proceed to checkout</Link></aside>{children}<footer><div className="footer-grid"><div><Brand /><p>Style made for your unforgettable moments.</p></div><div><h3>Customer care</h3><p>Gift-ready packaging<br />Nationwide delivery</p></div><div><h3>Secure payments</h3><p>Cash on Delivery · bKash · Nagad</p></div></div><small>Copyright {new Date().getFullYear()} Cherie. Beloved Always.</small></footer></>;
 }

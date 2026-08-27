@@ -99,6 +99,10 @@ const orderSchema = new mongoose.Schema({
     name: String, price: Number, quantity: Number
   }],
   subtotal: { type: Number, required: true },
+  deliveryArea: { type: String, enum: ['inside-dhaka', 'outside-dhaka'], default: 'inside-dhaka' },
+  deliveryCharge: { type: Number, min: 0, default: 0 },
+  total: { type: Number, min: 0 },
+  paymentMethod: { type: String, enum: ['cod', 'bkash', 'nagad'], default: 'cod' },
   status: { type: String, enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'], default: 'pending' }
 }, { timestamps: true });
 

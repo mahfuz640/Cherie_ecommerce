@@ -5,5 +5,6 @@ import { CartProvider } from './context/CartContext';
 import './styles.css';
 import './features.css';
 import './hero-wide.css';
+import './commerce.css';
 
 createRoot(document.getElementById('root')).render(<BrowserRouter><CartProvider><App /></CartProvider></BrowserRouter>);

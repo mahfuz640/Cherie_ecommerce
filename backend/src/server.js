@@ -525,7 +525,7 @@ app.post('/api/upload', requireAdmin, requireDatabase, upload.single('image'), (
 });
 
 app.post('/api/orders', requireDatabase, asyncRoute(async (req, res) => {
-  const { customer, items } = req.body;
+  const { customer, items, deliveryArea = 'inside-dhaka', paymentMethod = 'cod' } = req.body;
   if (!customer?.name || !customer?.phone || !customer?.address || !Array.isArray(items) || !items.length) {
     return res.status(400).json({ message: 'Customer and order items are required.' });
   }
@@ -544,7 +544,10 @@ app.post('/api/orders', requireDatabase, asyncRoute(async (req, res) => {
     };
   });
   const subtotal = lines.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const order = await Order.create({ customer, items: lines, subtotal });
+  const safeDeliveryArea = deliveryArea === 'outside-dhaka' ? 'outside-dhaka' : 'inside-dhaka';
+  const deliveryCharge = safeDeliveryArea === 'outside-dhaka' ? 130 : 70;
+  const safePaymentMethod = ['cod', 'bkash', 'nagad'].includes(paymentMethod) ? paymentMethod : 'cod';
+  const order = await Order.create({ customer, items: lines, subtotal, deliveryArea: safeDeliveryArea, deliveryCharge, total: subtotal + deliveryCharge, paymentMethod: safePaymentMethod });
   emitStoreUpdate(['orders']);
   res.status(201).json({ orderId: order._id, invoiceUrl: `/api/orders/${order._id}/invoice` });
 }));
